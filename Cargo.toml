@@ -1,0 +1,7 @@
+[workspace]
+
+members = [
+    "injector-example",
+    "snowflake-ingame"
+#    "dx11-test"
+]

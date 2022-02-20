@@ -165,6 +165,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "gl_generator"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a95dfc23a2b4a9a2f5ab41d194f8bfda3cabec42af4e39f08c339eb2a0c124d"
+dependencies = [
+ "khronos_api",
+ "log",
+ "xml-rs",
+]
+
+[[package]]
 name = "goblin"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -216,6 +227,12 @@ dependencies = [
  "winapi 0.2.8",
  "winapi-build",
 ]
+
+[[package]]
+name = "khronos_api"
+version = "3.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
 name = "lazy_static"
@@ -379,6 +396,13 @@ name = "once_cell"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da32515d9f6e6e489d7bc9d84c71b060db7247dc035bbe44eac88cf87486d8d5"
+
+[[package]]
+name = "opengl-bindings"
+version = "0.1.0"
+dependencies = [
+ "gl_generator",
+]
 
 [[package]]
 name = "path-absolutize"
@@ -579,9 +603,8 @@ version = "0.1.0"
 dependencies = [
  "detour",
  "indexmap",
+ "opengl-bindings",
  "windows",
- "windy 0.2.0",
- "windy-macros",
 ]
 
 [[package]]
@@ -751,23 +774,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "504a2476202769977a040c6364301a3f65d0cc9e3fb08600b2bda150a0488316"
 
 [[package]]
-name = "windy"
-version = "0.1.4"
+name = "xml-rs"
+version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "465dabb59559b319661ec27b9ae97066526635882699755d5724033016638527"
-
-[[package]]
-name = "windy"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6db45db26347e439cea3aaa2dc220ec23fd84011da9066caf89dee912e6d806a"
-
-[[package]]
-name = "windy-macros"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61754ab773de2e0842207446eefa7fcce9bf8787d40cf63378b2b5c43d61fdc1"
-dependencies = [
- "syn",
- "windy 0.1.4",
-]
+checksum = "d2d7d3948613f75c98fd9328cfdcc45acc4d360655289d0a7d4ec931392200a3"

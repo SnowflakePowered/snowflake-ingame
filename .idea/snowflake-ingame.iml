@@ -5,6 +5,7 @@
       <sourceFolder url="file://$MODULE_DIR$/injector-example/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/snowflake-ingame/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/dx11-test/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/opengl-bindings/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />

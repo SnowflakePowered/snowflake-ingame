@@ -1,11 +1,8 @@
 use std::error::Error;
-use std::iter;
-use std::lazy::SyncLazy;
-use std::sync::RwLock;
 
 use detour::static_detour;
-use indexmap::IndexMap;
-use windows::core::{HRESULT, Interface};
+use windows::core::HRESULT;
+use windows::core::Interface;
 use windows::Win32::Foundation::{BOOL, HINSTANCE};
 use windows::Win32::Graphics::Direct3D::{
     D3D_DRIVER_TYPE_HARDWARE, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_11_1,
@@ -27,9 +24,10 @@ use windows::Win32::Graphics::Dxgi::Common::{
     DXGI_SAMPLE_DESC,
 };
 
-use crate::hook::HookChain;
-
 use crate::{HookHandle, win32};
+use crate::hook_define;
+use crate::hook_impl_fn;
+use crate::hook_link_chain;
 
 struct VTables {
     pub vtbl_dxgi_swapchain: *const IDXGISwapChain_Vtbl,
@@ -97,34 +95,13 @@ fn get_vtables() -> Result<VTables, Box<dyn Error>> {
     }
 }
 
-pub struct PresentContext<'a> {
-    chain: iter::Rev<indexmap::map::Iter<'a, usize, FnPresentHook>>,
-}
-
-impl<'a> HookChain<'a, FnPresentHook> for PresentContext<'a> {
-    fn fp_next(&mut self) -> &'a FnPresentHook {
-        let (_, fp) = unsafe { self.chain.next().unwrap_unchecked() };
-        fp
-    }
-}
-
-pub struct ResizeBuffersContext<'a> {
-    chain: iter::Rev<indexmap::map::Iter<'a, usize, FnResizeBuffersHook>>,
-}
-
-impl<'a> HookChain<'a, FnResizeBuffersHook> for ResizeBuffersContext<'a> {
-    fn fp_next(&mut self) -> &'a FnResizeBuffersHook {
-        let (_, fp) = unsafe { self.chain.next().unwrap_unchecked() };
-        fp
-    }
-}
-
 pub type FnPresentHook = fn(
     this: IDXGISwapChain,
     syncinterval: u32,
     flags: u32,
     next: PresentContext,
 ) -> windows::core::HRESULT;
+
 pub type FnResizeBuffersHook = fn(
     this: IDXGISwapChain,
     buffercount: u32,
@@ -140,114 +117,73 @@ static_detour! {
     static RESIZE_BUFFERS_DETOUR: extern "system" fn(IDXGISwapChain, u32, u32, u32, DXGI_FORMAT, u32) -> windows::core::HRESULT;
 }
 
-static PRESENT_CHAIN: SyncLazy<RwLock<IndexMap<usize, FnPresentHook>>> =
-    SyncLazy::new(|| RwLock::new(IndexMap::new()));
-static RESIZE_BUFFERS_CHAIN: SyncLazy<RwLock<IndexMap<usize, FnResizeBuffersHook>>> =
-    SyncLazy::new(|| RwLock::new(IndexMap::new()));
-
-pub struct D3D11HookHandle {
+pub struct Direct3D11HookHandle {
     present_handle: usize,
     resize_buffers_handle: usize,
 }
 
-pub struct D3D11HookContext;
+hook_define!(chain PRESENT_CHAIN with FnPresentHook => PresentContext);
+hook_define!(chain RESIZE_BUFFERS_CHAIN with FnResizeBuffersHook => ResizeBuffersContext);
 
-impl D3D11HookContext {
-    fn present(this: IDXGISwapChain, syncinterval: u32, flags: u32) -> HRESULT {
-        if let Ok(chain) = PRESENT_CHAIN.read() {
-            if let Some((_, next)) = chain.last() {
-                let mut iter = chain.iter().rev();
+pub struct Direct3D11HookContext;
 
-                // Advance the chain to the next call.
-                iter.next();
-                return next(this, syncinterval, flags, PresentContext { chain: iter });
-            }
-        }
-        PRESENT_DETOUR.call(this, syncinterval, flags)
-    }
+impl Direct3D11HookContext {
+    hook_impl_fn!(fn present(this: IDXGISwapChain, syncinterval: u32, flags: u32) -> HRESULT
+        => (PRESENT_CHAIN, PRESENT_DETOUR, PresentContext));
+    hook_impl_fn!(fn resize_buffers(this: IDXGISwapChain,  bufcount: u32, width: u32, height: u32, format: DXGI_FORMAT, swapchain_flags: u32) -> HRESULT
+        => (RESIZE_BUFFERS_CHAIN, RESIZE_BUFFERS_DETOUR, ResizeBuffersContext));
 
-    fn resize_buffers(
-        this: IDXGISwapChain,
-        bufcount: u32,
-        width: u32,
-        height: u32,
-        format: DXGI_FORMAT,
-        swapchain_flags: u32,
-    ) -> HRESULT {
-        if let Ok(chain) = RESIZE_BUFFERS_CHAIN.read() {
-            if let Some((_, next)) = chain.last() {
-                let mut iter = chain.iter().rev();
-
-                // Advance the chain to the next call.
-                iter.next();
-                return next(
-                    this,
-                    bufcount,
-                    width,
-                    height,
-                    format,
-                    swapchain_flags,
-                    ResizeBuffersContext { chain: iter },
-                );
-            }
-        }
-        RESIZE_BUFFERS_DETOUR.call(this, bufcount, width, height, format, swapchain_flags)
-    }
-
-    pub fn init() -> Result<D3D11HookContext, Box<dyn Error>> {
+    pub fn init() -> Result<Direct3D11HookContext, Box<dyn Error>> {
         let vtables = get_vtables()?;
+
+        // Setup call chain base before detouring
+        hook_link_chain! {
+            link PRESENT_CHAIN with PRESENT_DETOUR => this, sync, flags;
+            link RESIZE_BUFFERS_CHAIN with RESIZE_BUFFERS_DETOUR => this, count, width, height, format, flags;
+        }
+
         unsafe {
             PRESENT_DETOUR
                 .initialize(
                     std::mem::transmute((*vtables.vtbl_dxgi_swapchain).Present),
-                    D3D11HookContext::present,
+                    Direct3D11HookContext::present,
                 )?
                 .enable()?;
             RESIZE_BUFFERS_DETOUR
                 .initialize(
                     std::mem::transmute((*vtables.vtbl_dxgi_swapchain).ResizeBuffers),
-                    D3D11HookContext::resize_buffers,
+                    Direct3D11HookContext::resize_buffers,
                 )?
                 .enable()?;
         }
 
-        PRESENT_CHAIN
-            .write()?
-            .insert(0, |this, sync, flags, mut _next| {
-                        PRESENT_DETOUR.call(this, sync, flags)
-            });
-
-        RESIZE_BUFFERS_CHAIN.write()?.insert(
-            0,
-            |this, count, width, height, format, flags, mut _next| {
-                RESIZE_BUFFERS_DETOUR.call(this, count, width, height, format, flags)
-            },
-        );
-
-        Ok(D3D11HookContext)
+        Ok(Direct3D11HookContext)
     }
 
     pub fn new(
         &self,
         present: FnPresentHook,
         resize_buffers: FnResizeBuffersHook,
-    ) -> Result<D3D11HookHandle, Box<dyn Error>> {
+    ) -> Result<Direct3D11HookHandle, Box<dyn Error>> {
+
         PRESENT_CHAIN
             .write()?
             .insert(present as *const () as usize, present);
+
         RESIZE_BUFFERS_CHAIN
             .write()?
             .insert(resize_buffers as *const () as usize, resize_buffers);
 
-        Ok(D3D11HookHandle {
+        Ok(Direct3D11HookHandle {
             present_handle: present as *const () as usize,
             resize_buffers_handle: resize_buffers as *const () as usize,
         })
     }
 }
-impl HookHandle for D3D11HookHandle {}
 
-impl Drop for D3D11HookHandle {
+impl HookHandle for Direct3D11HookHandle {}
+
+impl Drop for Direct3D11HookHandle {
     fn drop(&mut self) {
         PRESENT_CHAIN.write().unwrap().remove(&self.present_handle);
         RESIZE_BUFFERS_CHAIN

@@ -7,23 +7,26 @@ use std::panic::catch_unwind;
 use windows::Win32::Foundation::{BOOL, HINSTANCE};
 use windows::Win32::System::Console::AllocConsole;
 use windows::Win32::System::SystemServices::DLL_PROCESS_ATTACH;
+use crate::d3d11::hook_d3d11::Direct3D11HookContext;
 
-use crate::d3d11::hook_d3d11::D3D11HookContext;
 use crate::hook::*;
+use crate::opengl::hook_opengl::OpenGLHookContext;
 
 mod d3d11;
 mod win32;
 mod hook;
+mod opengl;
+
 
 unsafe fn main() -> Result<(), Box<dyn Error>> {
-    let ctx = D3D11HookContext::init()?;
+    let ctx = Direct3D11HookContext::init()?;
 
     ctx.new(|this, sync, flags, mut next| {
             // eprintln!("hello from hok");
             let fnext = next.fp_next();
             fnext(this, sync, flags, next)
-        },
-                          |this, cnt, width, height, format, flags, mut next| {
+            },
+            |this, cnt, width, height, format, flags, mut next| {
             eprintln!("rz {} {}", width, height);
             let fnext = next.fp_next();
             fnext(this, cnt, width, height, format, flags, next)
@@ -31,6 +34,12 @@ unsafe fn main() -> Result<(), Box<dyn Error>> {
     )?
     .persist();
 
+    let ctx = OpenGLHookContext::init()?;
+    ctx.new(|hdc, mut next| {
+        eprintln!("hello from hook!");
+        let fnext = next.fp_next();
+        fnext(hdc, next)
+    })?.persist();
     Ok(())
 }
 

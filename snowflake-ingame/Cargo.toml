@@ -33,10 +33,13 @@ features = [
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
-
 ]
 
 [dependencies]
 detour = { version = "0.8.1", features = ["nightly"] }
 indexmap = "1.8"
 opengl-bindings = { path = "../opengl-bindings" }
+tokio = { version = "1.17.0", features = ["full"] }
+
+ipipe = { version = "0.11", features = ["static_pipe", "channels"] }
+uuid = "0.8"

@@ -1,10 +1,14 @@
 use std::mem::ManuallyDrop;
 
 pub trait HookChain<'a, T> {
+    /// Gets a pointer to the next method in the call chain.
+    /// Every hook must advance the call chain for the next hook and return
+    /// the result.
     fn fp_next(&mut self) -> &'a T;
 }
 
 pub trait HookHandle : Sized {
+    /// Persist the hook and do not remove it on drop.
     fn persist(self) -> ManuallyDrop<Self> {
         ManuallyDrop::new(self)
     }
@@ -54,6 +58,13 @@ macro_rules! hook_link_chain {
             $chain.write()?.insert(0, |$($args),*, _next| {
                 $detour.call($($args),*)
             });
+        )*
+    };
+    ($(link $chain:ident with $detour:ident box => $($args:ident),*);*;) => {
+        $(
+            $chain.write()?.insert(0, Box::new(|$($args),*, _next| {
+                $detour.call($($args),*)
+            }));
         )*
     }
 }

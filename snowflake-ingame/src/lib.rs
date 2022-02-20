@@ -21,6 +21,8 @@ mod opengl;
 unsafe fn main() -> Result<(), Box<dyn Error>> {
     let ctx = Direct3D11HookContext::init()?;
 
+    let x = ();
+
     ctx.new(|this, sync, flags, mut next| {
             // eprintln!("hello from hok");
             let fnext = next.fp_next();
@@ -35,11 +37,12 @@ unsafe fn main() -> Result<(), Box<dyn Error>> {
     .persist();
 
     let ctx = OpenGLHookContext::init()?;
-    ctx.new(|hdc, mut next| {
+    ctx.new(Box::new(move |hdc, mut next| {
+        let y = x;
         eprintln!("hello from hook!");
         let fnext = next.fp_next();
         fnext(hdc, next)
-    })?.persist();
+    }))?.persist();
     Ok(())
 }
 

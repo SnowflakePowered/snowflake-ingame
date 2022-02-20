@@ -15,7 +15,7 @@ use crate::hook_define;
 use crate::hook_impl_fn;
 use crate::hook_link_chain;
 
-unsafe fn create_wgl_loader() -> Result<Box<dyn Fn(&'static str) -> *const c_void>, Box<dyn Error>> {
+unsafe fn create_wgl_loader() -> Result<impl Fn(&'static str) -> *const c_void, Box<dyn Error>> {
     let opengl_instance = GetModuleHandleA(PSTR(b"opengl32\0".as_ptr()));
     if opengl_instance.is_invalid() {
         let error = GetLastError();
@@ -23,7 +23,8 @@ unsafe fn create_wgl_loader() -> Result<Box<dyn Fn(&'static str) -> *const c_voi
             .into());
     }
     Ok(Box::new(move |s| {
-        let proc_name = CString::new(s).unwrap(); // todo: verify this behaviour.
+        // The source of this string is a &str, so it is always valid UTF-8.
+        let proc_name = CString::new(s).unwrap_unchecked();
 
         if let Some(exported_addr) =  GetProcAddress(opengl_instance, PSTR(proc_name.as_ptr() as *const u8)) {
             return exported_addr as * const c_void
@@ -46,7 +47,7 @@ static_detour! {
     static SWAP_BUFFERS_DETOUR: extern "system" fn(windows::Win32::Graphics::Gdi::HDC) -> windows::Win32::Foundation::BOOL;
 }
 
-pub type FnSwapBuffersHook = fn(HDC, SwapBuffersContext) -> BOOL;
+pub type FnSwapBuffersHook = Box<dyn (Fn(HDC, SwapBuffersContext) -> BOOL) + Send + Sync>;
 hook_define!(chain SWAP_BUFFERS_CHAIN with FnSwapBuffersHook => SwapBuffersContext);
 
 impl OpenGLHookContext {
@@ -54,12 +55,12 @@ impl OpenGLHookContext {
         (SWAP_BUFFERS_CHAIN, SWAP_BUFFERS_DETOUR, SwapBuffersContext)
     );
 
-    pub fn init() -> Result<OpenGLHookContext, Box<dyn Error>>{
+    pub fn init() -> Result<OpenGLHookContext, Box<dyn Error>> {
         let gl_gpa = unsafe { create_wgl_loader()? };
 
         // Setup call chain termination before detouring
         hook_link_chain! {
-            link SWAP_BUFFERS_CHAIN with SWAP_BUFFERS_DETOUR => hdc;
+            link SWAP_BUFFERS_CHAIN with SWAP_BUFFERS_DETOUR box => hdc;
         }
 
         unsafe {
@@ -76,12 +77,13 @@ impl OpenGLHookContext {
         &self,
         swap_buffers: FnSwapBuffersHook,
     ) -> Result<OpenGLHookHandle, Box<dyn Error>> {
+        let key = &*swap_buffers as *const _ as *const () as usize;
         SWAP_BUFFERS_CHAIN
             .write()?
-            .insert(swap_buffers as *const () as usize, swap_buffers);
+            .insert(key, swap_buffers);
 
         Ok(OpenGLHookHandle {
-            swap_buffers_handle: swap_buffers as *const () as usize,
+            swap_buffers_handle: key,
         })
     }
 }

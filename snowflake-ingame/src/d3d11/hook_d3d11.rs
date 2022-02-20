@@ -136,7 +136,7 @@ impl Direct3D11HookContext {
     pub fn init() -> Result<Direct3D11HookContext, Box<dyn Error>> {
         let vtables = get_vtables()?;
 
-        // Setup call chain base before detouring
+        // Setup call chain termination before detouring
         hook_link_chain! {
             link PRESENT_CHAIN with PRESENT_DETOUR => this, sync, flags;
             link RESIZE_BUFFERS_CHAIN with RESIZE_BUFFERS_DETOUR => this, count, width, height, format, flags;

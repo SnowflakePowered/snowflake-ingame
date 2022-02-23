@@ -1,9 +1,9 @@
-use std::sync::Mutex;
 use windows::Win32::Foundation::{CloseHandle, DUPLICATE_SAME_ACCESS, DuplicateHandle, HANDLE, HWND};
-use windows::Win32::Graphics::Direct3D11::{ID3D11Device1, ID3D11ShaderResourceView, ID3D11Texture2D};
+use windows::Win32::Graphics::Direct3D11::{ID3D11ShaderResourceView, ID3D11Texture2D};
 use windows::Win32::Graphics::Dxgi::IDXGIKeyedMutex;
 use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcess, PROCESS_DUP_HANDLE};
-use crate::ipc::OverlayTextureEventParams;
+
+use crate::ipc::cmd::OverlayTextureEventParams;
 
 pub struct Overlay {
     keyed_mutex: Option<IDXGIKeyedMutex>,

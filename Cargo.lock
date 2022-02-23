@@ -293,6 +293,7 @@ dependencies = [
  "lazy_static",
  "nix",
  "rand 0.5.6",
+ "tokio",
  "winapi 0.3.9",
 ]
 

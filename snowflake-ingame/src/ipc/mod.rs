@@ -1,10 +1,19 @@
 use std::error::Error;
+use std::fmt::{Display, Formatter};
+use std::io::{ErrorKind, Read, Write};
+use std::ops::Deref;
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 use ipipe::{OnCleanup, Pipe};
+use tokio::io::{AsyncReadExt, AsyncWriteExt, Interest};
 use tokio::net::windows::named_pipe::{ClientOptions, NamedPipeClient};
-use tokio::time;
+use tokio::{io, time};
+use tokio::runtime::{Handle, Runtime};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::task::JoinHandle;
 use uuid::Uuid;
 use windows::Win32::Foundation::ERROR_PIPE_BUSY;
+use crate::ipc::IpcConnectError::InvalidHandshake;
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 #[repr(transparent)]
@@ -60,7 +69,7 @@ pub struct CursorEventParams {
 #[derive(Debug, Clone, Copy)]
 pub struct OverlayTextureEventParams {
     pub handle: usize,
-    pub source_pid: usize,
+    pub source_pid: i32,
     pub width: u32,
     pub height: u32,
     pub size: u64,
@@ -115,7 +124,23 @@ pub struct GameWindowCommand {
     pub params: GameWindowCommandParams
 }
 
-pub async fn connect(pipeid: Uuid) -> Result<NamedPipeClient, Box<dyn Error>> {
+#[derive(Debug)]
+pub enum IpcConnectError {
+    InvalidHandshake
+}
+
+impl Display for IpcConnectError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IpcConnectError::InvalidHandshake => "Invalid handshake"
+        };
+        Ok(())
+    }
+}
+
+impl std::error::Error for IpcConnectError {}
+
+pub async fn connect(pipeid: &Uuid) -> Result<NamedPipeClient, Box<dyn Error>> {
     let pipe_name = format!(r"\\.\pipe\Snowflake.Orchestration.Renderer-{}", pipeid.to_simple());
     let client = loop {
         match ClientOptions::new().open(&pipe_name) {
@@ -130,6 +155,217 @@ pub async fn connect(pipeid: Uuid) -> Result<NamedPipeClient, Box<dyn Error>> {
     Ok(client)
 }
 
+pub fn connect_ipipe(pipeid: Uuid) -> Result<Pipe, Box<dyn Error>> {
+    let pipe_name = format!(r"\\.\pipe\Snowflake.Orchestration.Renderer-{}", pipeid.to_simple());
+    let client = Pipe::open(pipe_name.as_ref(), OnCleanup::NoDelete)?;
+    Ok(client)
+}
+
+pub struct IpcConnection {
+    ctx : Runtime,
+    pipe: Option<NamedPipeClient>,
+    cmd_sender: Option<tokio::sync::mpsc::UnboundedSender<GameWindowCommand>>,
+    cmd_rx: Option<tokio::sync::mpsc::UnboundedReceiver<GameWindowCommand>>,
+
+    // cmd_in_src: tokio::sync::broadcast::Sender<GameWindowCommand>,
+    // listen_thread: JoinHandle<()>
+   uuid: Uuid,
+}
+
+pub struct IpcHandle {
+    ctx: Handle,
+    pipe: Arc<tokio::sync::RwLock<NamedPipeClient>>
+}
+
+async fn try_read_pipe(pipe: &NamedPipeClient, buf: &mut [u8]) -> Result<Option<GameWindowCommand>, Box<dyn Error + Send + Sync>> {
+    pipe.readable().await?;
+    match pipe.try_read(buf) {
+        Ok(0) => return Err(io::Error::new(io::ErrorKind::BrokenPipe, "Pipe closed when expected handshake").into()),
+        Ok(n) => Ok(Some(buf.try_into()?)),
+        Err(e) if e.kind() == io::ErrorKind::WouldBlock => Ok(None),
+        Err(e) => return Err(e.into())
+    }
+}
+
+impl IpcConnection {
+    pub fn connect(&mut self, pipeid: Uuid) -> Result<(), Box<dyn Error>> {
+        let pipe = self.ctx.block_on(async {
+            let mut pipe = connect(&pipeid).await?;
+
+            let handshake = GameWindowCommand {
+                magic: GameWindowMagic::MAGIC,
+                ty: GameWindowCommandType::HANDSHAKE,
+                params: GameWindowCommandParams {
+                    handshake_event: HandshakeEventParams {
+                        uuid: Uuid::nil()
+                    }
+                }
+            };
+
+            let handshake_bytes: Vec<u8> = handshake.into();
+            pipe.write(&handshake_bytes).await?;
+
+            let mut handshake_recv = vec![0u8; std::mem::size_of::<GameWindowCommand>()];
+            pipe.read_exact(&mut handshake_recv).await?;
+
+            let handshake: GameWindowCommand = handshake_recv.as_slice().try_into()?;
+
+            if handshake.ty != GameWindowCommandType::HANDSHAKE {
+                return Err(InvalidHandshake.into());
+            }
+
+            if unsafe { handshake.params.handshake_event.uuid } != pipeid {
+                return Err(InvalidHandshake.into());
+            }
+
+            Ok::<_, Box<dyn Error>>(pipe)
+        })?;
+
+        self.pipe = Some(pipe);
+
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        self.cmd_rx = Some(rx);
+        self.cmd_sender = Some(tx);
+        Ok(())
+    }
+
+    fn connect_(&self) -> Result<NamedPipeClient, Box<dyn Error>> {
+        let pipe = self.ctx.block_on(async {
+            let mut pipe = connect(&self.uuid).await?;
+
+            let handshake = GameWindowCommand {
+                magic: GameWindowMagic::MAGIC,
+                ty: GameWindowCommandType::HANDSHAKE,
+                params: GameWindowCommandParams {
+                    handshake_event: HandshakeEventParams {
+                        uuid: Uuid::nil()
+                    }
+                }
+            };
+
+            let handshake_bytes: Vec<u8> = handshake.into();
+            pipe.write(&handshake_bytes).await?;
+
+            let mut handshake_recv = vec![0u8; std::mem::size_of::<GameWindowCommand>()];
+            pipe.read_exact(&mut handshake_recv).await?;
+
+            let handshake: GameWindowCommand = handshake_recv.as_slice().try_into()?;
+
+            if handshake.ty != GameWindowCommandType::HANDSHAKE {
+                return Err(InvalidHandshake.into());
+            }
+
+            if unsafe { handshake.params.handshake_event.uuid } != self.uuid {
+                return Err(InvalidHandshake.into());
+            }
+
+            Ok::<_, Box<dyn Error>>(pipe)
+        })?;
+        Ok(pipe)
+    }
+
+    pub fn new(uuid: Uuid) -> IpcConnection {
+       IpcConnection { ctx: Runtime::new().unwrap(), uuid, pipe: None, cmd_sender: None, cmd_rx: None }
+    }
+
+    pub fn handle(&self) -> Option<tokio::sync::mpsc::UnboundedSender<GameWindowCommand>> {
+        if let Some(snd) = &self.cmd_sender {
+            return Some(snd.clone());
+        }
+        None
+    }
+
+    pub fn listen(mut self) -> Result<(), Box<dyn Error>> {
+        let mut pipe = tokio::sync::Mutex::new(self.pipe.unwrap());
+        let mut cmd_rx = self.cmd_rx.unwrap();
+        self.ctx.block_on(async move {
+            loop {
+                let mut m = Vec::new();
+                tokio::select! {
+                    Ok(Some(cmd)) = async {
+                        try_read_pipe(&pipe.lock().await.deref(), &mut m).await
+                    }
+                    => {
+                        eprintln!("r {}", cmd.ty.0);
+                    }
+                    res = async { if let Some(cmd) = cmd_rx.recv().await {
+                        &pipe.lock().await.write_all((&cmd).into()).await?;
+                    }  Ok::<_, io::Error>(()) } => {
+                        match res {
+                            Ok(_) =>   eprintln!("s"),
+                            Err(e) => eprintln!("e {:?}", e)
+                        }
+
+                    }
+                    else => { }
+                }
+            }
+        });
+
+        Ok(())
+    }
+    // pub fn make_sender(&self) -> tokio::sync::mpsc::Sender<GameWindowCommand> {
+    //     self.cmd_sender.clone()
+    // }
+
+    // pub fn make_receiver(&self) -> tokio::sync::broadcast::Receiver<GameWindowCommand> {
+    //     self.cmd_in_src.subscribe()
+    // }
+
+    // pub async fn listen(self) {
+    //     self.listen_thread.await;
+    // }
+    // fn send(&self, cmd: GameWindowCommand) -> JoinHandle<bool> {
+    //     self.rt.spawn(async move {
+    //         let cmd = cmd;
+    //         let cmd: &[u8] = (&cmd).into();
+    //         loop {
+    //             if self.pipe.writable().await.is_err() {
+    //                 break false
+    //             }
+    //             match self.pipe.try_write(cmd) {
+    //                 Ok(0) => break false,
+    //                 Ok(_n) => break true,
+    //                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => continue,
+    //                 Err(_e) => break false
+    //             }
+    //         }
+    //     })
+    // }
+}
+
+impl IpcHandle {
+    pub fn send(&self, cmd: GameWindowCommand) {
+        let pipe = Arc::clone(&self.pipe);
+        self.ctx.spawn(async move {
+            // let mut pipe = pipe.write().await;
+            // pipe.writable().await?;
+            // pipe.write_all((&cmd).into()).await?;
+            match pipe.try_write() {
+                Ok(mut pipe) => {
+                    loop {
+                        eprintln!("sending {}", cmd.ty.0);
+                        pipe.writable().await?;
+                        match pipe.try_write((&cmd).into()) {
+                            Ok(b) => break,
+                            Err(e) if e.kind() == io::ErrorKind::WouldBlock => continue,
+                            Err(e) => {
+                                eprintln!("{:?}", e);
+                            }
+                        }
+                    }
+                    eprintln!("dropped lock");
+                    drop(pipe);
+                }
+                Err(e) => {
+                    eprintln!("{:?}", e);
+                }
+            }
+
+            Ok::<_, io::Error>(())
+        });
+    }
+}
 unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
     ::std::slice::from_raw_parts(
         (p as *const T) as *const u8,
@@ -142,5 +378,46 @@ impl <'a> Into<&'a [u8]> for &'a GameWindowCommand {
         unsafe {
             any_as_u8_slice(self)
         }
+    }
+}
+
+impl <'a> Into<Vec<u8>> for GameWindowCommand {
+    fn into(self) -> Vec<u8> {
+        unsafe {
+            Vec::from(any_as_u8_slice(&self))
+        }
+    }
+}
+impl <'a> TryFrom<&'a [u8]> for &'a GameWindowCommand {
+    type Error = io::Error;
+
+    fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
+        let (head, body, _tail) = unsafe { value.align_to::<GameWindowCommand>() };
+        if !head.is_empty() {
+            return Err(io::Error::new(ErrorKind::InvalidData, "Received data was not aligned."))
+        }
+        let cmd_struct = &body[0];
+        if !cmd_struct.magic.is_valid() {
+            return Err(io::Error::new(ErrorKind::InvalidData, "Unexpected magic number for command packet."))
+        }
+        Ok(cmd_struct)
+    }
+}
+
+impl <'a> TryFrom<&'a mut [u8]> for GameWindowCommand {
+    type Error = io::Error;
+
+    fn try_from(value: &'a mut [u8]) -> Result<Self, Self::Error> {
+        let cmd_struct: &GameWindowCommand = &value.try_into()?;
+        Ok(*cmd_struct)
+    }
+}
+
+impl <'a> TryFrom<&'a [u8]> for GameWindowCommand {
+    type Error = io::Error;
+
+    fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
+        let cmd_struct: &GameWindowCommand = value.try_into()?;
+        Ok(*cmd_struct)
     }
 }

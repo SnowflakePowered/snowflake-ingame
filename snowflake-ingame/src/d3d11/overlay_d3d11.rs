@@ -36,9 +36,9 @@ impl Overlay {
         self.ready_to_paint = false;
     }
 
-    pub fn prepare_paint(device: ID3D11Device1) -> bool {
-        // device.CreateShaderResourceView()
-    }
+    // pub fn prepare_paint(device: ID3D11Device1) -> bool {
+    //     // device.CreateShaderResourceView()
+    // }
 
     pub fn refresh(&mut self, params: OverlayTextureEventParams) -> bool {
         let owning_pid = params.source_pid;
@@ -70,6 +70,12 @@ impl Overlay {
     }
 
     pub fn paint<F: Sized + FnOnce(usize, u32, u32)>(&self, f: F) {
-        f(self.shader_resource_view.as_ref().unwrap() as *const ID3D11ShaderResourceView as usize, 0, 0);
+        // addref
+        if let Some(srv_handle) = &self.shader_resource_view {
+            unsafe {
+                f(std::mem::transmute_copy(&srv_handle), 0, 0);
+            }
+            // release
+        }
     }
 }

@@ -53,6 +53,13 @@ macro_rules! hook_impl_fn {
 }
 
 macro_rules! hook_link_chain {
+    ($(box link $chain:ident with $detour:ident => $($args:ident),*);*;) => {
+        $(
+            $chain.write()?.insert(0, Box::new(|$($args),*, _next| {
+                $detour.call($($args),*)
+            }));
+        )*
+    };
     ($(link $chain:ident with $detour:ident => $($args:ident),*);*;) => {
         $(
             $chain.write()?.insert(0, |$($args),*, _next| {
@@ -60,13 +67,6 @@ macro_rules! hook_link_chain {
             });
         )*
     };
-    ($(link $chain:ident with $detour:ident box => $($args:ident),*);*;) => {
-        $(
-            $chain.write()?.insert(0, Box::new(|$($args),*, _next| {
-                $detour.call($($args),*)
-            }));
-        )*
-    }
 }
 
 pub(crate) use hook_define;

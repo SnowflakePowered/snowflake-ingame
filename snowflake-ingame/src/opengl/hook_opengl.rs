@@ -60,7 +60,7 @@ impl OpenGLHookContext {
 
         // Setup call chain termination before detouring
         hook_link_chain! {
-            link SWAP_BUFFERS_CHAIN with SWAP_BUFFERS_DETOUR box => hdc;
+            box link SWAP_BUFFERS_CHAIN with SWAP_BUFFERS_DETOUR  => hdc;
         }
 
         unsafe {

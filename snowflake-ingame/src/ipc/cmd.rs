@@ -109,6 +109,18 @@ pub struct GameWindowCommand {
     pub params: GameWindowCommandParams
 }
 
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+pub struct Size {
+    width: u32,
+    height: u32,
+}
+
+impl Size {
+    pub fn new(width: u32, height: u32) -> Size {
+        Size { width, height }
+    }
+}
+
 impl GameWindowCommand {
     pub const fn handshake(uuid: Uuid) -> GameWindowCommand {
         GameWindowCommand {
@@ -117,6 +129,19 @@ impl GameWindowCommand {
             params: GameWindowCommandParams {
                 handshake_event: HandshakeEventParams {
                     uuid
+                }
+            }
+        }
+    }
+
+    pub const fn window_resize(size: &Size) -> GameWindowCommand {
+        GameWindowCommand {
+            magic: GameWindowMagic::MAGIC,
+            ty: GameWindowCommandType::WINDOW_RESIZE,
+            params: GameWindowCommandParams {
+                resize_event: WindowResizeEventParams {
+                    height: size.height as i32,
+                    width: size.width as i32
                 }
             }
         }

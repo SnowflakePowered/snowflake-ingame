@@ -95,12 +95,7 @@ fn get_vtables() -> Result<VTables, Box<dyn Error>> {
     }
 }
 
-pub type FnPresentHook = fn(
-    this: IDXGISwapChain,
-    syncinterval: u32,
-    flags: u32,
-    next: PresentContext,
-) -> windows::core::HRESULT;
+pub type FnPresentHook = Box<dyn Fn(IDXGISwapChain, u32, u32, PresentContext) -> windows::core::HRESULT>;
 
 pub type FnResizeBuffersHook = fn(
     this: IDXGISwapChain,
@@ -138,7 +133,10 @@ impl Direct3D11HookContext {
 
         // Setup call chain termination before detouring
         hook_link_chain! {
-            link PRESENT_CHAIN with PRESENT_DETOUR => this, sync, flags;
+            box link PRESENT_CHAIN with PRESENT_DETOUR => this, sync, flags;
+        }
+
+        hook_link_chain! {
             link RESIZE_BUFFERS_CHAIN with RESIZE_BUFFERS_DETOUR => this, count, width, height, format, flags;
         }
 

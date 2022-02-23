@@ -3,18 +3,36 @@ use windows::Win32::Graphics::Direct3D11::{ID3D11ShaderResourceView, ID3D11Textu
 use windows::Win32::Graphics::Dxgi::IDXGIKeyedMutex;
 use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcess, PROCESS_DUP_HANDLE};
 
-use crate::ipc::cmd::OverlayTextureEventParams;
+use crate::ipc::cmd::{OverlayTextureEventParams, Size};
 
-pub struct Overlay {
+pub struct D3D11Overlay {
     keyed_mutex: Option<IDXGIKeyedMutex>,
     shader_resource_view: Option<ID3D11ShaderResourceView>,
     texture: Option<ID3D11Texture2D>,
     handle: HANDLE,
     window: HWND,
+    size: Size,
     ready_to_paint: bool
 }
 
-impl Overlay {
+impl D3D11Overlay {
+
+    pub fn new() -> D3D11Overlay {
+        D3D11Overlay {
+            keyed_mutex: None,
+            shader_resource_view: None,
+            texture: None,
+            handle: HANDLE::default(),
+            window: HWND::default(),
+            size: Size::new(0, 0),
+            ready_to_paint: false
+        }
+    }
+
+    pub fn size_matches_viewpoint(&self, size: &Size) -> bool {
+        return self.size == *size;
+    }
+
     pub fn acquire_sync(&mut self) -> bool {
         if let Some(kmt) = &self.keyed_mutex {
             unsafe { kmt.AcquireSync(0, u32::MAX).map(|_| true).unwrap_or(false) }

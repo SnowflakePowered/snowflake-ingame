@@ -14,6 +14,7 @@ use crate::HookHandle;
 use crate::hook_define;
 use crate::hook_impl_fn;
 use crate::hook_link_chain;
+use crate::hook_key;
 
 unsafe fn create_wgl_loader() -> Result<impl Fn(&'static str) -> *const c_void, Box<dyn Error>> {
     let opengl_instance = GetModuleHandleA(PSTR(b"opengl32\0".as_ptr()));
@@ -77,7 +78,7 @@ impl OpenGLHookContext {
         &self,
         swap_buffers: FnSwapBuffersHook,
     ) -> Result<OpenGLHookHandle, Box<dyn Error>> {
-        let key = &*swap_buffers as *const _ as *const () as usize;
+        let key = hook_key!(box swap_buffers);
         SWAP_BUFFERS_CHAIN
             .write()?
             .insert(key, swap_buffers);

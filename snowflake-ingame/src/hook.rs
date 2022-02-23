@@ -69,6 +69,12 @@ macro_rules! hook_link_chain {
     };
 }
 
+macro_rules! hook_key {
+    ($fn:ident) => {$fn as *const () as usize};
+    (box $fn:ident) => {&*$fn as *const _ as *const () as usize}
+}
+
 pub(crate) use hook_define;
 pub(crate) use hook_impl_fn;
 pub(crate) use hook_link_chain;
+pub(crate) use hook_key;

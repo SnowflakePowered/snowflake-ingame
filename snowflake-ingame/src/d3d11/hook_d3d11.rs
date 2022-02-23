@@ -28,6 +28,7 @@ use crate::{HookHandle, win32};
 use crate::hook_define;
 use crate::hook_impl_fn;
 use crate::hook_link_chain;
+use crate::hook_key;
 
 struct VTables {
     pub vtbl_dxgi_swapchain: *const IDXGISwapChain_Vtbl,
@@ -164,16 +165,17 @@ impl Direct3D11HookContext {
         resize_buffers: FnResizeBuffersHook,
     ) -> Result<Direct3D11HookHandle, Box<dyn Error>> {
 
+        let present_key = hook_key!(box present);
         PRESENT_CHAIN
             .write()?
-            .insert(present as *const () as usize, present);
+            .insert(present_key, present);
 
         RESIZE_BUFFERS_CHAIN
             .write()?
             .insert(resize_buffers as *const () as usize, resize_buffers);
 
         Ok(Direct3D11HookHandle {
-            present_handle: present as *const () as usize,
+            present_handle: present_key,
             resize_buffers_handle: resize_buffers as *const () as usize,
         })
     }

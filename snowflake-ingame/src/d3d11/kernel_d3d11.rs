@@ -24,20 +24,20 @@ impl Direct3D11Kernel {
         })
     }
 
-    pub fn init(mut self) -> Result<(), Box<dyn Error>>{
+    pub fn init(&mut self) -> Result<(), Box<dyn Error>>{
         let handle = self.ipc.clone();
         let overlay = self.overlay.clone();
         self.hook.new(
-            Box::new(move |this: IDXGISwapChain, sync: u32, flags: u32, mut next| {
-                let mut overlay = overlay.borrow_mut();
-                if let Ok(cmd) = handle.try_recv() {
-                    match &cmd.ty {
-                        &GameWindowCommandType::OVERLAY => {
-                            overlay.refresh(unsafe { cmd.params.overlay_event }) ;
-                        },
-                        _ => {}
-                    }
-                }
+            Box::new(|this: IDXGISwapChain, sync: u32, flags: u32, mut next| {
+                // let mut overlay = overlay.borrow_mut();
+                // if let Ok(cmd) = handle.try_recv() {
+                //     match &cmd.ty {
+                //         &GameWindowCommandType::OVERLAY => {
+                //             overlay.refresh(unsafe { cmd.params.overlay_event }) ;
+                //         },
+                //         _ => {}
+                //     }
+                // }
 
 
                 (|| unsafe {
@@ -48,7 +48,7 @@ impl Direct3D11Kernel {
                     backbuffer.GetDesc(&mut backbuffer_desc);
 
                     let size = Size::new(backbuffer_desc.Width, backbuffer_desc.Height);
-                    if !overlay.size_matches_viewpoint(&size) {
+                    if !overlay.borrow().size_matches_viewpoint(&size) {
                         handle.send(GameWindowCommand::window_resize(&size));
                     }
                     Ok::<_, Box<dyn Error>>(())

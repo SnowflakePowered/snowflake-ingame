@@ -48,13 +48,8 @@ pub async fn connect(pipeid: &Uuid) -> Result<NamedPipeClient, Box<dyn Error>> {
     Ok(client)
 }
 
-pub struct IpcConnection {
+pub struct IpcConnectionBuilder {
     ctx : Runtime,
-    pipe: Option<NamedPipeClient>,
-    cmd_client_tx: Option<tokio::sync::mpsc::UnboundedSender<GameWindowCommand>>,
-    cmd_client_rx: Option<crossbeam_channel::Receiver<GameWindowCommand>>,
-    cmd_rx: Option<tokio::sync::mpsc::UnboundedReceiver<GameWindowCommand>>,
-    cmd_tx: Option<crossbeam_channel::Sender<GameWindowCommand>>,
     uuid: Uuid,
 }
 
@@ -74,10 +69,21 @@ async fn try_read_pipe(pipe: &NamedPipeClient, buf: &mut [u8]) -> Result<Option<
     }
 }
 
-impl IpcConnection {
-    pub fn connect(&mut self, pipeid: Uuid) -> Result<(), Box<dyn Error>> {
+pub struct IpcConnection {
+    ctx : Runtime,
+    pipe: NamedPipeClient,
+    cmd_client_tx: tokio::sync::mpsc::UnboundedSender<GameWindowCommand>,
+    cmd_client_rx: crossbeam_channel::Receiver<GameWindowCommand>,
+    cmd_rx: tokio::sync::mpsc::UnboundedReceiver<GameWindowCommand>,
+    cmd_tx: crossbeam_channel::Sender<GameWindowCommand>,
+    uuid: Uuid,
+}
+
+impl IpcConnectionBuilder {
+    pub fn connect(mut self) -> Result<IpcConnection, Box<dyn Error>> {
         let pipe = self.ctx.block_on(async {
-            let mut pipe = connect(&pipeid).await?;
+            let pipeid = &self.uuid;
+            let mut pipe = connect(pipeid).await?;
 
             let handshake = GameWindowCommand::handshake(pipeid);
 
@@ -93,49 +99,44 @@ impl IpcConnection {
                 return Err(InvalidHandshake.into());
             }
 
-            if unsafe { handshake.params.handshake_event.uuid } != pipeid {
+            if unsafe { &handshake.params.handshake_event.uuid } != pipeid {
                 return Err(InvalidHandshake.into());
             }
 
             Ok::<_, Box<dyn Error>>(pipe)
         })?;
 
-        self.pipe = Some(pipe);
-
         let (client_tx, rx) = tokio::sync::mpsc::unbounded_channel();
         let (tx, client_rx) = crossbeam_channel::unbounded();
-        self.cmd_rx = Some(rx);
-        self.cmd_tx = Some(tx);
-        self.cmd_client_tx = Some(client_tx);
-        self.cmd_client_rx = Some(client_rx);
-        Ok(())
+  
+        Ok(IpcConnection {
+            ctx: self.ctx,
+            pipe,
+            cmd_rx: rx,
+            cmd_tx: tx,
+            cmd_client_tx: client_tx,
+            cmd_client_rx: client_rx,
+            uuid: self.uuid
+        })
     }
 
-    pub fn new(uuid: Uuid) -> IpcConnection {
-       IpcConnection { ctx: Runtime::new().unwrap(), uuid,
-           pipe: None,
-           cmd_client_tx: None,
-           cmd_client_rx: None,
-           cmd_rx: None,
-           cmd_tx: None
-       }
+    pub fn new(uuid: Uuid) -> Self {
+       Self { ctx: Runtime::new().unwrap(), uuid }
     }
+}
 
-    pub fn handle(&self) -> Option<IpcHandle> {
-        if let (Some(snd), Some(recv))
-            = (&self.cmd_client_tx, &self.cmd_client_rx) {
-            return Some(IpcHandle {
-                sender: UnboundedSender::clone(&snd),
-                events: crossbeam_channel::Receiver::clone(&recv)
-            });
+impl IpcConnection {
+    pub fn handle(&self) -> IpcHandle {
+        IpcHandle {
+            sender: UnboundedSender::clone(&self.cmd_client_tx),
+            events: crossbeam_channel::Receiver::clone( &self.cmd_client_rx)
         }
-        None
     }
 
     pub fn listen(mut self) -> Result<(), Box<dyn Error>> {
-        let mut client = self.pipe.unwrap();
-        let mut cmd_rx = self.cmd_rx.unwrap();
-        let mut cmd_tx = self.cmd_tx.unwrap();
+        let mut client = self.pipe;
+        let mut cmd_rx = self.cmd_rx;
+        let mut cmd_tx = self.cmd_tx;
         self.ctx.block_on(async move {
             loop {
                 let ready = client.ready(Interest::READABLE | Interest::WRITABLE).await?;
@@ -148,7 +149,7 @@ impl IpcConnection {
                                 Ok(cmd) => {
                                     match cmd_tx.send(*cmd) {
                                         Ok(()) => {
-                                          //  println!("[ipc] Recv cmd {}", cmd.ty.0)
+                                            //  println!("[ipc] Recv cmd {}", cmd.ty.0)
                                         },
                                         Err(e) => println!("[ipc] bcast error {:?}", e)
                                     }
@@ -204,62 +205,5 @@ impl IpcHandle {
 
     pub fn try_recv(&self) -> Result<GameWindowCommand, crossbeam_channel::TryRecvError> {
         self.events.try_recv()
-    }
-}
-
-unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
-    ::std::slice::from_raw_parts(
-        (p as *const T) as *const u8,
-        ::std::mem::size_of::<T>(),
-    )
-}
-
-impl <'a> Into<&'a [u8]> for &'a GameWindowCommand {
-    fn into(self) -> &'a [u8] {
-        unsafe {
-            any_as_u8_slice(self)
-        }
-    }
-}
-
-impl <'a> Into<Vec<u8>> for GameWindowCommand {
-    fn into(self) -> Vec<u8> {
-        unsafe {
-            Vec::from(any_as_u8_slice(&self))
-        }
-    }
-}
-
-impl <'a> TryFrom<&'a [u8]> for &'a GameWindowCommand {
-    type Error = io::Error;
-
-    fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
-        let (head, body, _tail) = unsafe { value.align_to::<GameWindowCommand>() };
-        if !head.is_empty() {
-            return Err(io::Error::new(ErrorKind::InvalidData, "Received data was not aligned."))
-        }
-        let cmd_struct = &body[0];
-        if !cmd_struct.magic.is_valid() {
-            return Err(io::Error::new(ErrorKind::InvalidData, "Unexpected magic number for command packet."))
-        }
-        Ok(cmd_struct)
-    }
-}
-
-impl <'a> TryFrom<&'a mut [u8]> for GameWindowCommand {
-    type Error = io::Error;
-
-    fn try_from(value: &'a mut [u8]) -> Result<Self, Self::Error> {
-        let cmd_struct: &GameWindowCommand = &value.try_into()?;
-        Ok(*cmd_struct)
-    }
-}
-
-impl <'a> TryFrom<&'a [u8]> for GameWindowCommand {
-    type Error = io::Error;
-
-    fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
-        let cmd_struct: &GameWindowCommand = value.try_into()?;
-        Ok(*cmd_struct)
     }
 }

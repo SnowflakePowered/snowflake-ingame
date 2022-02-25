@@ -15,27 +15,31 @@ use crate::d3d11::hook_d3d11::FnPresentHook;
 use imgui::Context;
 use tokio::io::AsyncWriteExt;
 
+/// Kernel for a D3D11 hook.
+///
+/// `overlay` and `imgui` should never be accessed outside of the Direct3D11 rendering thread.
+/// The mutexes to which should only ever be acquired inside an `FnPresentHook` or `FnResizeBuffersHook`,
+/// to ensure the soundness of the Send and Sync impls for
 pub struct Direct3D11Kernel {
     hook: Direct3D11HookContext,
     overlay: Pin<Arc<RwLock<D3D11Overlay>>>,
-    imgui: Pin<Arc<RwLock<Direct3DImGuiController>>>,
+    imgui: Pin<Arc<RwLock<D3D11ImguiController>>>,
     ipc: IpcHandle,
 }
 
-pub struct Direct3DImGuiController {
+pub struct D3D11ImguiController {
     imgui: Context,
 }
 
-unsafe impl Send for Direct3DImGuiController {}
-unsafe impl Sync for Direct3DImGuiController {}
-
+unsafe impl Send for D3D11ImguiController {}
+unsafe impl Sync for D3D11ImguiController {}
 
 impl Direct3D11Kernel {
     pub fn new(ipc: IpcHandle) -> Result<Self, Box<dyn Error>> {
         Ok(Direct3D11Kernel {
             hook: Direct3D11HookContext::init()?,
             overlay: Pin::new(Arc::new(RwLock::new(D3D11Overlay::new()))),
-            imgui: Pin::new(Arc::new(RwLock::new(Direct3DImGuiController { imgui: Context::create() }))),
+            imgui: Pin::new(Arc::new(RwLock::new(D3D11ImguiController { imgui: Context::create() }))),
             ipc
         })
     }

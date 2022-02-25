@@ -1,4 +1,5 @@
 use std::fmt::{Debug, Formatter};
+use std::io::ErrorKind;
 use uuid::Uuid;
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
@@ -129,13 +130,13 @@ impl Size {
 }
 
 impl GameWindowCommand {
-    pub const fn handshake(uuid: Uuid) -> GameWindowCommand {
+    pub const fn handshake(uuid: &Uuid) -> GameWindowCommand {
         GameWindowCommand {
             magic: GameWindowMagic::MAGIC,
             ty: GameWindowCommandType::HANDSHAKE,
             params: GameWindowCommandParams {
                 handshake_event: HandshakeEventParams {
-                    uuid
+                    uuid: *uuid
                 }
             }
         }
@@ -152,5 +153,63 @@ impl GameWindowCommand {
                 }
             }
         }
+    }
+}
+
+
+unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
+    ::std::slice::from_raw_parts(
+        (p as *const T) as *const u8,
+        ::std::mem::size_of::<T>(),
+    )
+}
+
+impl <'a> Into<&'a [u8]> for &'a GameWindowCommand {
+    fn into(self) -> &'a [u8] {
+        unsafe {
+            any_as_u8_slice(self)
+        }
+    }
+}
+
+impl <'a> Into<Vec<u8>> for GameWindowCommand {
+    fn into(self) -> Vec<u8> {
+        unsafe {
+            Vec::from(any_as_u8_slice(&self))
+        }
+    }
+}
+
+impl <'a> TryFrom<&'a [u8]> for &'a GameWindowCommand {
+    type Error = std::io::Error;
+
+    fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
+        let (head, body, _tail) = unsafe { value.align_to::<GameWindowCommand>() };
+        if !head.is_empty() {
+            return Err(std::io::Error::new(ErrorKind::InvalidData, "Received data was not aligned."))
+        }
+        let cmd_struct = &body[0];
+        if !cmd_struct.magic.is_valid() {
+            return Err(std::io::Error::new(ErrorKind::InvalidData, "Unexpected magic number for command packet."))
+        }
+        Ok(cmd_struct)
+    }
+}
+
+impl <'a> TryFrom<&'a mut [u8]> for GameWindowCommand {
+    type Error = std::io::Error;
+
+    fn try_from(value: &'a mut [u8]) -> Result<Self, Self::Error> {
+        let cmd_struct: &GameWindowCommand = &value.try_into()?;
+        Ok(*cmd_struct)
+    }
+}
+
+impl <'a> TryFrom<&'a [u8]> for GameWindowCommand {
+    type Error = std::io::Error;
+
+    fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
+        let cmd_struct: &GameWindowCommand = value.try_into()?;
+        Ok(*cmd_struct)
     }
 }

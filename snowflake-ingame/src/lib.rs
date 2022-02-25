@@ -14,7 +14,7 @@ use windows::Win32::System::SystemServices::DLL_PROCESS_ATTACH;
 use crate::d3d11::hook_d3d11::Direct3D11HookContext;
 use crate::hook::*;
 use crate::ipc::cmd::GameWindowCommand;
-use crate::ipc::IpcConnection;
+use crate::ipc::{IpcConnection, IpcConnectionBuilder};
 use crate::opengl::hook_opengl::OpenGLHookContext;
 
 mod d3d11;
@@ -25,18 +25,17 @@ mod ipc;
 
 
 unsafe fn main() -> Result<(), Box<dyn Error>> {
-    let mut ipc = IpcConnection::new(Uuid::nil());
-    ipc.connect(Uuid::nil())?;
+    let mut ipc = IpcConnectionBuilder::new(Uuid::nil());
+    let mut ipc = ipc.connect()?;
 
-    let handle = ipc.handle().unwrap();
+    let handle = ipc.handle();
 
     let ctx = OpenGLHookContext::init()?;
 
-    let handshake = GameWindowCommand::handshake(Uuid::nil());
+    let handshake = GameWindowCommand::handshake(&Uuid::nil());
 
     ctx.new(Box::new(move |hdc, mut next| {
         handle.send(handshake).unwrap_or_else(|_| println!("failed to send"));
-
         let fnext = next.fp_next();
         fnext(hdc, next)
     }))?.persist();

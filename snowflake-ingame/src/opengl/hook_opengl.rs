@@ -2,13 +2,13 @@ use std::error::Error;
 use std::ffi::{c_void, CString};
 
 use detour::static_detour;
-use windows::core::{HRESULT, HSTRING};
-use windows::Win32::Foundation::{BOOL, GetLastError, PSTR};
+use windows::core::{HRESULT, HSTRING, PCSTR};
+use windows::Win32::Foundation::{BOOL, GetLastError};
 use windows::Win32::Graphics::Gdi::HDC;
 use windows::Win32::Graphics::OpenGL::wglGetProcAddress;
 use windows::Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress};
 
-use opengl_bindings::load_with as gl_load_with;
+use opengl_bindings as gl;
 
 use crate::HookHandle;
 use crate::hook_define;
@@ -17,25 +17,25 @@ use crate::hook_link_chain;
 use crate::hook_key;
 
 unsafe fn create_wgl_loader() -> Result<impl Fn(&'static str) -> *const c_void, Box<dyn Error>> {
-    let opengl_instance = GetModuleHandleA(PSTR(b"opengl32\0".as_ptr()));
+    let opengl_instance = GetModuleHandleA(PCSTR(b"opengl32\0".as_ptr()));
     if opengl_instance.is_invalid() {
         let error = GetLastError();
         return Err(windows::core::Error::new(HRESULT(error.0 as i32), HSTRING::new())
             .into());
     }
-    Ok(Box::new(move |s| {
+    Ok(move |s| {
         // The source of this string is a &str, so it is always valid UTF-8.
         let proc_name = CString::new(s).unwrap_unchecked();
 
-        if let Some(exported_addr) =  GetProcAddress(opengl_instance, PSTR(proc_name.as_ptr() as *const u8)) {
+        if let Some(exported_addr) =  GetProcAddress(opengl_instance, PCSTR(proc_name.as_ptr() as *const u8)) {
             return exported_addr as * const c_void
         }
 
-        if let Some(exported_addr) = wglGetProcAddress(PSTR(proc_name.as_ptr() as *const u8)) {
+        if let Some(exported_addr) = wglGetProcAddress(PCSTR(proc_name.as_ptr() as *const u8)) {
             return exported_addr as * const c_void
         }
         std::ptr::null()
-    }))
+    })
 }
 
 
@@ -61,7 +61,7 @@ impl OpenGLHookContext {
 
         // Setup call chain termination before detouring
         hook_link_chain! {
-            box link SWAP_BUFFERS_CHAIN with SWAP_BUFFERS_DETOUR  => hdc;
+            box link SWAP_BUFFERS_CHAIN with SWAP_BUFFERS_DETOUR => hdc;
         }
 
         unsafe {
@@ -70,7 +70,7 @@ impl OpenGLHookContext {
         }
 
         // initialize OpenGL context
-        gl_load_with(gl_gpa);
+        gl::load_with(gl_gpa);
         Ok(OpenGLHookContext)
     }
 

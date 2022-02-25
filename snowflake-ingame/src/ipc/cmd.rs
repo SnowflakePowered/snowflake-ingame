@@ -1,3 +1,4 @@
+use std::fmt::{Debug, Formatter};
 use uuid::Uuid;
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
@@ -107,6 +108,12 @@ pub struct GameWindowCommand {
     pub magic: GameWindowMagic,
     pub ty: GameWindowCommandType,
     pub params: GameWindowCommandParams
+}
+
+impl Debug for GameWindowCommand {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("GameWindowCommand {{ ty: {} }}", self.ty.0))
+    }
 }
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]

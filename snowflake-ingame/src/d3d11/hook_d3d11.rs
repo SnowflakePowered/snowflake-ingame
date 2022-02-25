@@ -1,7 +1,6 @@
 use std::error::Error;
 
 use detour::static_detour;
-use windows::core::HRESULT;
 use windows::core::Interface;
 use windows::Win32::Foundation::{BOOL, HINSTANCE};
 use windows::Win32::Graphics::Direct3D::{
@@ -75,8 +74,7 @@ fn get_vtables() -> Result<VTables, Box<dyn Error>> {
             D3D_DRIVER_TYPE_HARDWARE,
             HINSTANCE::default(),
             D3D11_CREATE_DEVICE_FLAG(0),
-            feature_levels.as_ptr(),
-            feature_levels.len() as u32,
+            &feature_levels,
             D3D11_SDK_VERSION,
             &swapchain_desc,
             &mut out_swapchain,
@@ -96,7 +94,7 @@ fn get_vtables() -> Result<VTables, Box<dyn Error>> {
     }
 }
 
-pub type FnPresentHook = Box<dyn Fn(IDXGISwapChain, u32, u32, PresentContext) -> windows::core::HRESULT>;
+pub type FnPresentHook = Box<dyn Send + Sync + Fn(IDXGISwapChain, u32, u32, PresentContext) -> windows::core::HRESULT>;
 
 pub type FnResizeBuffersHook = fn(
     this: IDXGISwapChain,
@@ -124,9 +122,9 @@ hook_define!(chain RESIZE_BUFFERS_CHAIN with FnResizeBuffersHook => ResizeBuffer
 pub struct Direct3D11HookContext;
 
 impl Direct3D11HookContext {
-    hook_impl_fn!(fn present(this: IDXGISwapChain, syncinterval: u32, flags: u32) -> HRESULT
+    hook_impl_fn!(fn present(this: IDXGISwapChain, syncinterval: u32, flags: u32) -> windows::core::HRESULT
         => (PRESENT_CHAIN, PRESENT_DETOUR, PresentContext));
-    hook_impl_fn!(fn resize_buffers(this: IDXGISwapChain,  bufcount: u32, width: u32, height: u32, format: DXGI_FORMAT, swapchain_flags: u32) -> HRESULT
+    hook_impl_fn!(fn resize_buffers(this: IDXGISwapChain,  bufcount: u32, width: u32, height: u32, format: DXGI_FORMAT, swapchain_flags: u32) -> windows::core::HRESULT
         => (RESIZE_BUFFERS_CHAIN, RESIZE_BUFFERS_DETOUR, ResizeBuffersContext));
 
     pub fn init() -> Result<Direct3D11HookContext, Box<dyn Error>> {

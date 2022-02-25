@@ -1,6 +1,7 @@
 use std::mem::size_of;
+use windows::core::{PCSTR, PSTR};
 
-use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, PSTR, WPARAM};
+use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleA;
 use windows::Win32::UI::WindowsAndMessaging::{CloseWindow, CreateWindowExA, RegisterClassExA, UnregisterClassA, CS_HREDRAW, CS_VREDRAW, WNDCLASSEXA, WS_OVERLAPPEDWINDOW, DefWindowProcA};
 
@@ -22,7 +23,7 @@ fn get_window_class(class_name: *const u8) -> (WNDCLASSEXA, HWND) {
             style: CS_HREDRAW | CS_VREDRAW,
             lpfnWndProc: Some(def_wnd_proc),
             hInstance: GetModuleHandleA(None),
-            lpszClassName: PSTR(class_name),
+            lpszClassName: PCSTR(class_name),
             ..Default::default()
         };
 
@@ -31,7 +32,7 @@ fn get_window_class(class_name: *const u8) -> (WNDCLASSEXA, HWND) {
         let hwnd = CreateWindowExA(
             Default::default(),
             window_class.lpszClassName,
-            PSTR(b"TEMPWINCLS\0".as_ptr()),
+            PCSTR(b"TEMPWINCLS\0".as_ptr()),
             WS_OVERLAPPEDWINDOW,
             0,
             0,

@@ -35,7 +35,6 @@ unsafe fn main() -> Result<(), Box<dyn Error>> {
     let handshake = GameWindowCommand::handshake(Uuid::nil());
 
     ctx.new(Box::new(move |hdc, mut next| {
-
         handle.send(handshake).unwrap_or_else(|_| println!("failed to send"));
 
         let fnext = next.fp_next();

@@ -1,19 +1,21 @@
 [package]
-name = "dx11-test"
+name = "imgui-renderer-dx11"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[dependencies]
+imgui = "0.8.2"
+
 [target.'cfg(target_os = "windows")'.dependencies.windows]
-version = "0.32"
+git = "https://github.com/microsoft/windows-rs"
 features = [
     "Foundation",
     "Win32_Foundation",
     "Win32_Graphics_Direct3D11" ,
     "Win32_Graphics_Direct3D_Fxc",
     "Win32_Graphics_Direct3D",
-    "Win32_Graphics_Direct3D12",
     "Win32_Graphics_Dxgi_Common",
     "Win32_Graphics_Dxgi",
     "Win32_Graphics_Gdi",
@@ -31,4 +33,11 @@ features = [
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
+]
+
+[build-dependencies.windows]
+git = "https://github.com/microsoft/windows-rs"
+features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Direct3D_Fxc"
 ]

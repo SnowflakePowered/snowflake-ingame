@@ -2,6 +2,7 @@
 
 members = [
     "injector-example",
-    "snowflake-ingame"
-#    "dx11-test"
+    "snowflake-ingame",
+    "opengl-bindings",
+    "imgui-renderer-dx11"
 ]

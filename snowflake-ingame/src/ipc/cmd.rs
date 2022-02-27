@@ -42,15 +42,14 @@ impl GameWindowMagic {
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
 pub struct HandshakeEventParams {
-    pub uuid: Uuid
+    pub uuid: Uuid,
 }
 
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
 pub struct CursorEventParams {
-    pub cursor: Cursor
+    pub cursor: Cursor,
 }
-
 
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
@@ -61,7 +60,7 @@ pub struct OverlayTextureEventParams {
     pub height: u32,
     pub size: u64,
     pub alignment: u64,
-    pub sync_handle: usize
+    pub sync_handle: usize,
 }
 
 #[repr(C, packed)]
@@ -89,7 +88,7 @@ pub struct MouseEventParams {
     pub mouse_x: f32,
     pub mouse_y: f32,
     pub wheel_x: f32,
-    pub wheel_y: f32
+    pub wheel_y: f32,
 }
 
 #[derive(Clone, Copy)]
@@ -108,7 +107,7 @@ pub union GameWindowCommandParams {
 pub struct GameWindowCommand {
     pub magic: GameWindowMagic,
     pub ty: GameWindowCommandType,
-    pub params: GameWindowCommandParams
+    pub params: GameWindowCommandParams,
 }
 
 impl Debug for GameWindowCommand {
@@ -135,10 +134,8 @@ impl GameWindowCommand {
             magic: GameWindowMagic::MAGIC,
             ty: GameWindowCommandType::HANDSHAKE,
             params: GameWindowCommandParams {
-                handshake_event: HandshakeEventParams {
-                    uuid: *uuid
-                }
-            }
+                handshake_event: HandshakeEventParams { uuid: *uuid },
+            },
         }
     }
 
@@ -149,54 +146,52 @@ impl GameWindowCommand {
             params: GameWindowCommandParams {
                 resize_event: WindowResizeEventParams {
                     height: size.height as i32,
-                    width: size.width as i32
-                }
-            }
+                    width: size.width as i32,
+                },
+            },
         }
     }
 }
-
 
 unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
-    ::std::slice::from_raw_parts(
-        (p as *const T) as *const u8,
-        ::std::mem::size_of::<T>(),
-    )
+    ::std::slice::from_raw_parts((p as *const T) as *const u8, ::std::mem::size_of::<T>())
 }
 
-impl <'a> Into<&'a [u8]> for &'a GameWindowCommand {
+impl<'a> Into<&'a [u8]> for &'a GameWindowCommand {
     fn into(self) -> &'a [u8] {
-        unsafe {
-            any_as_u8_slice(self)
-        }
+        unsafe { any_as_u8_slice(self) }
     }
 }
 
-impl <'a> Into<Vec<u8>> for GameWindowCommand {
+impl<'a> Into<Vec<u8>> for GameWindowCommand {
     fn into(self) -> Vec<u8> {
-        unsafe {
-            Vec::from(any_as_u8_slice(&self))
-        }
+        unsafe { Vec::from(any_as_u8_slice(&self)) }
     }
 }
 
-impl <'a> TryFrom<&'a [u8]> for &'a GameWindowCommand {
+impl<'a> TryFrom<&'a [u8]> for &'a GameWindowCommand {
     type Error = std::io::Error;
 
     fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
         let (head, body, _tail) = unsafe { value.align_to::<GameWindowCommand>() };
         if !head.is_empty() {
-            return Err(std::io::Error::new(ErrorKind::InvalidData, "Received data was not aligned."))
+            return Err(std::io::Error::new(
+                ErrorKind::InvalidData,
+                "Received data was not aligned.",
+            ));
         }
         let cmd_struct = &body[0];
         if !cmd_struct.magic.is_valid() {
-            return Err(std::io::Error::new(ErrorKind::InvalidData, "Unexpected magic number for command packet."))
+            return Err(std::io::Error::new(
+                ErrorKind::InvalidData,
+                "Unexpected magic number for command packet.",
+            ));
         }
         Ok(cmd_struct)
     }
 }
 
-impl <'a> TryFrom<&'a mut [u8]> for GameWindowCommand {
+impl<'a> TryFrom<&'a mut [u8]> for GameWindowCommand {
     type Error = std::io::Error;
 
     fn try_from(value: &'a mut [u8]) -> Result<Self, Self::Error> {
@@ -205,7 +200,7 @@ impl <'a> TryFrom<&'a mut [u8]> for GameWindowCommand {
     }
 }
 
-impl <'a> TryFrom<&'a [u8]> for GameWindowCommand {
+impl<'a> TryFrom<&'a [u8]> for GameWindowCommand {
     type Error = std::io::Error;
 
     fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {

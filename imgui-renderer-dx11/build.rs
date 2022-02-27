@@ -1,11 +1,11 @@
-use std::{env, fs, ptr, slice, str};
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
+use std::{env, fs, ptr, slice, str};
 use windows::core::{PCSTR, PSTR};
 use windows::Win32::Graphics::Direct3D::Fxc::D3DCompile;
 use windows::Win32::Graphics::Direct3D::ID3DBlob;
 
-fn main() -> Result<(), Box<dyn Error>>{
+fn main() -> Result<(), Box<dyn Error>> {
     static VERTEX_SHADER: &str = include_str!("src/shaders/vertex_shader.vs_4_0");
     static PIXEL_SHADER: &str = include_str!("src/shaders/pixel_shader.ps_4_0");
 
@@ -24,9 +24,10 @@ fn main() -> Result<(), Box<dyn Error>>{
             None,
             PCSTR(b"main\0".as_ptr()),
             PCSTR(b"vs_4_0\0".as_ptr()),
-            0, 0,
+            0,
+            0,
             &mut vs_blob,
-            &mut err
+            &mut err,
         )?;
 
         check_shader_err(&err)?;
@@ -46,9 +47,10 @@ fn main() -> Result<(), Box<dyn Error>>{
             None,
             PCSTR(b"main\0".as_ptr()),
             PCSTR(b"ps_4_0\0".as_ptr()),
-            0, 0,
+            0,
+            0,
             &mut ps_blob,
-            &mut err
+            &mut err,
         )?;
 
         check_shader_err(&err)?;
@@ -68,7 +70,7 @@ unsafe fn write_blob(shader_name: &str, blob: ID3DBlob) {
 }
 
 enum D3DShaderCompilerError {
-    CompilerError(String)
+    CompilerError(String),
 }
 
 impl Debug for D3DShaderCompilerError {
@@ -97,7 +99,9 @@ fn check_shader_err(err: &Option<ID3DBlob>) -> Result<(), D3DShaderCompilerError
                 str::from_utf8(slice::from_raw_parts(
                     err.GetBufferPointer().cast::<u8>(),
                     err.GetBufferSize(),
-                )).map(ToOwned::to_owned).unwrap_or_else(|_| String::from("Unknown error"))
+                ))
+                .map(ToOwned::to_owned)
+                .unwrap_or_else(|_| String::from("Unknown error"))
             };
             Err(D3DShaderCompilerError::CompilerError(err_msg))
         }

@@ -7,7 +7,7 @@ pub trait HookChain<'a, T> {
     fn fp_next(&mut self) -> &'a T;
 }
 
-pub trait HookHandle : Sized {
+pub trait HookHandle: Sized {
     /// Persist the hook and do not remove it on drop.
     fn persist(self) -> ManuallyDrop<Self> {
         ManuallyDrop::new(self)
@@ -15,16 +15,16 @@ pub trait HookHandle : Sized {
 }
 
 macro_rules! hook_define {
-     (chain $chain_name:ident with $fn_hook:ty => $context_name:ident) => {
-
+    (chain $chain_name:ident with $fn_hook:ty => $context_name:ident) => {
         // Make context
         pub struct $context_name<'a> {
             chain: std::iter::Rev<indexmap::map::Iter<'a, std::primitive::usize, $fn_hook>>,
         }
 
         // Make chain
-        static $chain_name: std::lazy::SyncLazy<std::sync::RwLock<indexmap::map::IndexMap<std::primitive::usize, $fn_hook>>>
-            = std::lazy::SyncLazy::new(|| std::sync::RwLock::new(indexmap::map::IndexMap::new()));
+        static $chain_name: std::lazy::SyncLazy<
+            std::sync::RwLock<indexmap::map::IndexMap<std::primitive::usize, $fn_hook>>,
+        > = std::lazy::SyncLazy::new(|| std::sync::RwLock::new(indexmap::map::IndexMap::new()));
 
         // Impl chain
         impl<'a> crate::hook::HookChain<'a, $fn_hook> for $context_name<'a> {
@@ -33,7 +33,7 @@ macro_rules! hook_define {
                 fp
             }
         }
-     }
+    };
 }
 
 macro_rules! hook_impl_fn {
@@ -70,11 +70,15 @@ macro_rules! hook_link_chain {
 }
 
 macro_rules! hook_key {
-    ($fn:ident) => {$fn as *const () as usize};
-    (box $fn:ident) => {&*$fn as *const _ as *const () as usize}
+    ($fn:ident) => {
+        $fn as *const () as usize
+    };
+    (box $fn:ident) => {
+        &*$fn as *const _ as *const () as usize
+    };
 }
 
 pub(crate) use hook_define;
 pub(crate) use hook_impl_fn;
-pub(crate) use hook_link_chain;
 pub(crate) use hook_key;
+pub(crate) use hook_link_chain;

@@ -7,27 +7,23 @@ use windows::Win32::Graphics::Direct3D::{
     D3D_DRIVER_TYPE_HARDWARE, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_11_1,
 };
 use windows::Win32::Graphics::Direct3D11::{
-    D3D11_CREATE_DEVICE_FLAG,
-    D3D11_SDK_VERSION, D3D11CreateDeviceAndSwapChain,
-    ID3D11Device_Vtbl,
-};
-use windows::Win32::Graphics::Dxgi::{
-    DXGI_SWAP_CHAIN_DESC,
-    DXGI_SWAP_EFFECT_DISCARD, DXGI_USAGE_RENDER_TARGET_OUTPUT,
-    IDXGISwapChain,
-    IDXGISwapChain_Vtbl,
+    D3D11CreateDeviceAndSwapChain, ID3D11Device, ID3D11Device_Vtbl, D3D11_CREATE_DEVICE_FLAG,
+    D3D11_SDK_VERSION,
 };
 use windows::Win32::Graphics::Dxgi::Common::{
-    DXGI_FORMAT, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_MODE_DESC,
-    DXGI_MODE_SCALING_UNSPECIFIED, DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED, DXGI_RATIONAL,
-    DXGI_SAMPLE_DESC,
+    DXGI_FORMAT, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_MODE_DESC, DXGI_MODE_SCALING_UNSPECIFIED,
+    DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED, DXGI_RATIONAL, DXGI_SAMPLE_DESC,
+};
+use windows::Win32::Graphics::Dxgi::{
+    IDXGISwapChain, IDXGISwapChain_Vtbl, DXGI_SWAP_CHAIN_DESC, DXGI_SWAP_EFFECT_DISCARD,
+    DXGI_USAGE_RENDER_TARGET_OUTPUT,
 };
 
-use crate::{HookHandle, win32};
 use crate::hook_define;
 use crate::hook_impl_fn;
-use crate::hook_link_chain;
 use crate::hook_key;
+use crate::hook_link_chain;
+use crate::{win32, HookHandle};
 
 struct VTables {
     pub vtbl_dxgi_swapchain: *const IDXGISwapChain_Vtbl,
@@ -94,7 +90,8 @@ fn get_vtables() -> Result<VTables, Box<dyn Error>> {
     }
 }
 
-pub type FnPresentHook = Box<dyn Send + Sync + Fn(IDXGISwapChain, u32, u32, PresentContext) -> windows::core::HRESULT>;
+pub type FnPresentHook =
+    Box<dyn Send + Sync + Fn(IDXGISwapChain, u32, u32, PresentContext) -> windows::core::HRESULT>;
 
 pub type FnResizeBuffersHook = fn(
     this: IDXGISwapChain,
@@ -162,11 +159,8 @@ impl Direct3D11HookContext {
         present: FnPresentHook,
         resize_buffers: FnResizeBuffersHook,
     ) -> Result<Direct3D11HookHandle, Box<dyn Error>> {
-
         let present_key = hook_key!(box present);
-        PRESENT_CHAIN
-            .write()?
-            .insert(present_key, present);
+        PRESENT_CHAIN.write()?.insert(present_key, present);
 
         RESIZE_BUFFERS_CHAIN
             .write()?

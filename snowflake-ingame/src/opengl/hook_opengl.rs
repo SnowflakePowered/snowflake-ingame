@@ -3,46 +3,46 @@ use std::ffi::{c_void, CString};
 
 use detour::static_detour;
 use windows::core::{HRESULT, HSTRING, PCSTR};
-use windows::Win32::Foundation::{BOOL, GetLastError};
+use windows::Win32::Foundation::{GetLastError, BOOL};
 use windows::Win32::Graphics::Gdi::HDC;
 use windows::Win32::Graphics::OpenGL::wglGetProcAddress;
 use windows::Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress};
 
 use opengl_bindings as gl;
 
-use crate::HookHandle;
 use crate::hook_define;
 use crate::hook_impl_fn;
-use crate::hook_link_chain;
 use crate::hook_key;
+use crate::hook_link_chain;
+use crate::HookHandle;
 
 unsafe fn create_wgl_loader() -> Result<impl Fn(&'static str) -> *const c_void, Box<dyn Error>> {
     let opengl_instance = GetModuleHandleA(PCSTR(b"opengl32\0".as_ptr()));
     if opengl_instance.is_invalid() {
         let error = GetLastError();
-        return Err(windows::core::Error::new(HRESULT(error.0 as i32), HSTRING::new())
-            .into());
+        return Err(windows::core::Error::new(HRESULT(error.0 as i32), HSTRING::new()).into());
     }
     Ok(move |s| {
         // The source of this string is a &str, so it is always valid UTF-8.
         let proc_name = CString::new(s).unwrap_unchecked();
 
-        if let Some(exported_addr) =  GetProcAddress(opengl_instance, PCSTR(proc_name.as_ptr() as *const u8)) {
-            return exported_addr as * const c_void
+        if let Some(exported_addr) =
+            GetProcAddress(opengl_instance, PCSTR(proc_name.as_ptr() as *const u8))
+        {
+            return exported_addr as *const c_void;
         }
 
         if let Some(exported_addr) = wglGetProcAddress(PCSTR(proc_name.as_ptr() as *const u8)) {
-            return exported_addr as * const c_void
+            return exported_addr as *const c_void;
         }
         std::ptr::null()
     })
 }
 
-
 pub struct OpenGLHookContext;
 
 pub struct OpenGLHookHandle {
-    swap_buffers_handle: usize
+    swap_buffers_handle: usize,
 }
 static_detour! {
     static SWAP_BUFFERS_DETOUR: extern "system" fn(windows::Win32::Graphics::Gdi::HDC) -> windows::Win32::Foundation::BOOL;
@@ -65,8 +65,12 @@ impl OpenGLHookContext {
         }
 
         unsafe {
-            SWAP_BUFFERS_DETOUR.initialize(std::mem::transmute(gl_gpa("wglSwapBuffers")),
-                                           OpenGLHookContext::swap_buffers)?.enable()?;
+            SWAP_BUFFERS_DETOUR
+                .initialize(
+                    std::mem::transmute(gl_gpa("wglSwapBuffers")),
+                    OpenGLHookContext::swap_buffers,
+                )?
+                .enable()?;
         }
 
         // initialize OpenGL context
@@ -74,14 +78,9 @@ impl OpenGLHookContext {
         Ok(OpenGLHookContext)
     }
 
-    pub fn new(
-        &self,
-        swap_buffers: FnSwapBuffersHook,
-    ) -> Result<OpenGLHookHandle, Box<dyn Error>> {
+    pub fn new(&self, swap_buffers: FnSwapBuffersHook) -> Result<OpenGLHookHandle, Box<dyn Error>> {
         let key = hook_key!(box swap_buffers);
-        SWAP_BUFFERS_CHAIN
-            .write()?
-            .insert(key, swap_buffers);
+        SWAP_BUFFERS_CHAIN.write()?.insert(key, swap_buffers);
 
         Ok(OpenGLHookHandle {
             swap_buffers_handle: key,
@@ -93,7 +92,9 @@ impl HookHandle for OpenGLHookHandle {}
 
 impl Drop for OpenGLHookHandle {
     fn drop(&mut self) {
-        SWAP_BUFFERS_CHAIN.write().unwrap().remove(&self.swap_buffers_handle);
+        SWAP_BUFFERS_CHAIN
+            .write()
+            .unwrap()
+            .remove(&self.swap_buffers_handle);
     }
 }
-

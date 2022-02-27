@@ -1,5 +1,5 @@
-fn main() -> Result<(), Box<dyn Error>>{
-    use dll_syringe::{Syringe, Process};
+fn main() -> Result<(), Box<dyn Error>> {
+    use dll_syringe::{Process, Syringe};
     use std::env::args;
 
     let _args: Vec<String> = args().collect();
@@ -7,7 +7,10 @@ fn main() -> Result<(), Box<dyn Error>>{
     let target_process = Process::from_child(child);
     let syringe = Syringe::new();
 
-    syringe.inject(&target_process, "D:\\coding\\snowflake-ingame\\target\\debug\\snowflake_ingame.dll")?;
+    syringe.inject(
+        &target_process,
+        "D:\\coding\\snowflake-ingame\\target\\debug\\snowflake_ingame.dll",
+    )?;
     Ok(())
 }
 

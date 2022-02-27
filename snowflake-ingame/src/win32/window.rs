@@ -3,7 +3,10 @@ use windows::core::{PCSTR, PSTR};
 
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleA;
-use windows::Win32::UI::WindowsAndMessaging::{CloseWindow, CreateWindowExA, RegisterClassExA, UnregisterClassA, CS_HREDRAW, CS_VREDRAW, WNDCLASSEXA, WS_OVERLAPPEDWINDOW, DefWindowProcA};
+use windows::Win32::UI::WindowsAndMessaging::{
+    CloseWindow, CreateWindowExA, DefWindowProcA, RegisterClassExA, UnregisterClassA, CS_HREDRAW,
+    CS_VREDRAW, WNDCLASSEXA, WS_OVERLAPPEDWINDOW,
+};
 
 pub struct TempWindow<'a>(WNDCLASSEXA, HWND, &'a [u8]);
 

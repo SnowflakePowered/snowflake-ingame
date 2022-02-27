@@ -1,6 +1,10 @@
 use std::sync::{LockResult, Mutex, MutexGuard};
-use windows::Win32::Foundation::{CloseHandle, DUPLICATE_SAME_ACCESS, DuplicateHandle, HANDLE, HWND};
-use windows::Win32::Graphics::Direct3D11::{ID3D11Device1, ID3D11ShaderResourceView, ID3D11Texture2D};
+use windows::Win32::Foundation::{
+    CloseHandle, DuplicateHandle, DUPLICATE_SAME_ACCESS, HANDLE, HWND,
+};
+use windows::Win32::Graphics::Direct3D11::{
+    ID3D11Device1, ID3D11ShaderResourceView, ID3D11Texture2D,
+};
 use windows::Win32::Graphics::Dxgi::IDXGIKeyedMutex;
 use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcess, PROCESS_DUP_HANDLE};
 
@@ -14,7 +18,7 @@ pub struct D3D11Overlay {
     window: HWND,
     size: Size,
     ready_to_paint: bool,
-    tex_mutex: Mutex<()>
+    tex_mutex: Mutex<()>,
 }
 
 /* this is hilariously unsafe and probably unsound */
@@ -22,7 +26,6 @@ unsafe impl Send for D3D11Overlay {}
 unsafe impl Sync for D3D11Overlay {}
 
 impl D3D11Overlay {
-
     pub fn ready_to_initialize(&self) -> bool {
         self.handle != HANDLE(0)
     }
@@ -36,11 +39,11 @@ impl D3D11Overlay {
             window: HWND::default(),
             size: Size::new(0, 0),
             ready_to_paint: false,
-            tex_mutex: Mutex::new(())
+            tex_mutex: Mutex::new(()),
         }
     }
 
-    pub fn lock(&self) -> LockResult<MutexGuard<()>>{
+    pub fn lock(&self) -> LockResult<MutexGuard<()>> {
         self.tex_mutex.lock()
     }
 
@@ -58,7 +61,9 @@ impl D3D11Overlay {
 
     pub fn release_sync(&self) {
         if let Some(kmt) = &self.keyed_mutex {
-            unsafe { kmt.ReleaseSync(0).unwrap_or(()); }
+            unsafe {
+                kmt.ReleaseSync(0).unwrap_or(());
+            }
         }
     }
 
@@ -71,7 +76,7 @@ impl D3D11Overlay {
 
     pub fn prepare_paint(&mut self, device: ID3D11Device1, output_window: HWND) -> bool {
         if self.ready_to_paint && self.window == output_window {
-            return true
+            return true;
         }
         self.invalidate();
         // todo: rest of this.
@@ -87,21 +92,30 @@ impl D3D11Overlay {
             let process = OpenProcess(PROCESS_DUP_HANDLE, false, owning_pid as u32);
             if process.is_invalid() {
                 eprintln!("unable to open source process");
-                return false
+                return false;
             }
 
             let mut duped_handle = std::ptr::null_mut();
-            if !DuplicateHandle(process, handle, GetCurrentProcess(), duped_handle,
-            0, false, DUPLICATE_SAME_ACCESS).as_bool() {
+            if !DuplicateHandle(
+                process,
+                handle,
+                GetCurrentProcess(),
+                duped_handle,
+                0,
+                false,
+                DUPLICATE_SAME_ACCESS,
+            )
+            .as_bool()
+            {
                 eprintln!("unable to duplicate handle");
-                return false
+                return false;
             }
 
             // this doesn't do anything if its already null.
             self.invalidate();
 
             if !CloseHandle(self.handle).as_bool() {
-                return false
+                return false;
             }
 
             eprintln!("duped handle {:p}", duped_handle);

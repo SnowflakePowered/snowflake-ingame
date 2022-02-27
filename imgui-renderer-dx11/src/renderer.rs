@@ -1,6 +1,7 @@
 use imgui::{BackendFlags, DrawData, Font, Textures};
 use windows::core::Result as HResult;
 use windows::Win32::Graphics::Direct3D11::{ID3D11Device, ID3D11DeviceContext, ID3D11ShaderResourceView};
+use crate::backup::StateBackup;
 use crate::buffers::{IndexBuffer, VertexBuffer};
 use crate::device_objects::{FontTexture, RendererDeviceObjects};
 
@@ -65,6 +66,11 @@ impl Renderer {
         self.vertex_buffer.reserve(draw_data.total_vtx_count as usize)?;
         self.index_buffer.reserve(draw_data.total_idx_count as usize)?;
 
+        unsafe {
+            let state = StateBackup::new(&self.context);
+
+            drop(state)
+        }
         Ok(())
     }
 }

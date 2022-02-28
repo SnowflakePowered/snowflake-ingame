@@ -1,7 +1,7 @@
 use crate::d3d11::hook_d3d11::FnPresentHook;
 use crate::d3d11::overlay_d3d11::D3D11Overlay;
 use crate::hook::HookChain;
-use crate::ipc::cmd::{GameWindowCommandType, Size};
+use crate::ipc::cmd::{GameWindowCommandType, Dimensions};
 use crate::ipc::IpcHandle;
 use crate::{Direct3D11HookContext, GameWindowCommand};
 use std::borrow::{Borrow, BorrowMut};
@@ -12,7 +12,7 @@ use std::sync::{Arc, RwLock};
 use windows::Win32::Graphics::Direct3D11::{ID3D11Device1, ID3D11Texture2D, D3D11_TEXTURE2D_DESC};
 use windows::Win32::Graphics::Dxgi::*;
 
-use imgui::Context;
+use imgui::{Context, Image, Window};
 use tokio::io::AsyncWriteExt;
 
 /// Kernel for a D3D11 hook.
@@ -29,6 +29,12 @@ pub struct Direct3D11Kernel {
 
 pub struct D3D11ImguiController {
     imgui: Context,
+}
+
+impl D3D11ImguiController {
+    pub fn frame<F: FnOnce(&mut Context, &mut D3D11Overlay)>(&mut self, overlay: &mut D3D11Overlay, f: F) {
+        f(&mut self.imgui, overlay)
+    }
 }
 
 unsafe impl Send for D3D11ImguiController {}
@@ -75,7 +81,7 @@ impl Direct3D11Kernel {
                     let mut backbuffer_desc: D3D11_TEXTURE2D_DESC = Default::default();
                     backbuffer.GetDesc(&mut backbuffer_desc);
 
-                    let size = Size::new(backbuffer_desc.Width, backbuffer_desc.Height);
+                    let size = Dimensions::new(backbuffer_desc.Width, backbuffer_desc.Height);
                     if !overlay.size_matches_viewpoint(&size) {
                         handle.send(GameWindowCommand::window_resize(&size))?;
                     }
@@ -96,9 +102,12 @@ impl Direct3D11Kernel {
                     // We don't need an external mutex here because the overlay will not change underneath us,
                     // since overlay is updated within Present now.
                     if overlay.acquire_sync() {
-                        let ui = imgui.imgui.frame();
-                        ui.show_demo_window(&mut false);
-                        let draw = ui.render();
+                        imgui.frame(&mut overlay, |ctx, overlay| {
+                           let ui = ctx.frame();
+                            ui.show_demo_window(&mut false);
+                            let draw = ui.render();
+
+                        });
                         overlay.release_sync();
                     }
 

@@ -1,11 +1,17 @@
+use imgui::internal::RawWrapper;
+use imgui::{DrawCmd, DrawData, DrawIdx, DrawVert, Textures};
+use windows::core::Result as HResult;
+use windows::Win32::Foundation::RECT;
+use windows::Win32::Graphics::Direct3D::D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+use windows::Win32::Graphics::Direct3D11::{
+    ID3D11Device, ID3D11DeviceContext, ID3D11ShaderResourceView, D3D11_MAP_WRITE_DISCARD,
+    D3D11_VIEWPORT,
+};
+use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_R16_UINT, DXGI_FORMAT_R32_UINT};
+
 use crate::backup::StateBackup;
 use crate::buffers::{IndexBuffer, VertexBuffer};
 use crate::device_objects::{FontTexture, RendererDeviceObjects};
-use imgui::{BackendFlags, DrawData, Font, Textures};
-use windows::core::Result as HResult;
-use windows::Win32::Graphics::Direct3D11::{
-    ID3D11Device, ID3D11DeviceContext, ID3D11ShaderResourceView,
-};
 
 #[repr(C)]
 pub(crate) struct VertexConstantBuffer {
@@ -78,9 +84,192 @@ impl Renderer {
 
         unsafe {
             let state = StateBackup::new(&self.context);
-
+            self.upload_buffers(draw_data)?;
+            self.setup_render_state(draw_data);
+            self.render_cmd_lists(draw_data);
             drop(state)
         }
         Ok(())
+    }
+
+    // upload vertex/index data into a single contiguous GPU buffer
+    unsafe fn upload_buffers(&self, draw_data: &DrawData) -> HResult<()> {
+        // Scope guard for mapped resources
+        // Vertex and index buffers
+        {
+            // Does this unmap on failure?
+            let mut vtx_resource =
+                self.context
+                    .Map(self.vertex_buffer.buffer(), 0, D3D11_MAP_WRITE_DISCARD, 0)?;
+            let mut idx_resource =
+                self.context
+                    .Map(self.index_buffer.buffer(), 0, D3D11_MAP_WRITE_DISCARD, 0)?;
+
+            let mut vtx_dst = std::slice::from_raw_parts_mut(
+                vtx_resource.pData.cast::<DrawVert>(),
+                draw_data.total_vtx_count as usize,
+            );
+            let mut idx_dst = std::slice::from_raw_parts_mut(
+                idx_resource.pData.cast::<DrawIdx>(),
+                draw_data.total_idx_count as usize,
+            );
+
+            // https://github.com/Veykril/imgui-dx11-renderer/blob/master/src/lib.rs#L373
+            for (vbuf, ibuf) in draw_data
+                .draw_lists()
+                .map(|draw_list| (draw_list.vtx_buffer(), draw_list.idx_buffer()))
+            {
+                vtx_dst[..vbuf.len()].copy_from_slice(vbuf);
+                idx_dst[..ibuf.len()].copy_from_slice(ibuf);
+                vtx_dst = &mut vtx_dst[vbuf.len()..];
+                idx_dst = &mut idx_dst[ibuf.len()..];
+            }
+
+            self.context.Unmap(self.vertex_buffer.buffer(), 0);
+            self.context.Unmap(self.index_buffer.buffer(), 0);
+        }
+
+        // Setup orthographic projection matrix into our constant buffer
+        // Our visible imgui space lies from drawData->DisplayPos (top left) to drawData->DisplayPos+dataData->DisplaySize (bottom right).
+        // DisplayPos is (0,0) for single viewport apps.
+        if let Some(device_objects) = &self.device_objects {
+            let const_resource = self.context.Map(
+                &device_objects.vertex_constant_buffer,
+                0,
+                D3D11_MAP_WRITE_DISCARD,
+                0,
+            )?;
+
+            let l = draw_data.display_pos[0];
+            let r = draw_data.display_pos[0] + draw_data.display_size[0];
+            let t = draw_data.display_pos[1];
+            let b = draw_data.display_pos[1] + draw_data.display_size[1];
+            let mvp = [
+                [2.0 / (r - l), 0.0, 0.0, 0.0],
+                [0.0, 2.0 / (t - b), 0.0, 0.0],
+                [0.0, 0.0, 0.5, 0.0],
+                [(r + l) / (l - r), (t + b) / (b - t), 0.5, 1.0],
+            ];
+            *const_resource.pData.cast::<VertexConstantBuffer>() = VertexConstantBuffer { mvp };
+            self.context
+                .Unmap(&device_objects.vertex_constant_buffer, 0);
+        }
+        Ok(())
+    }
+
+    unsafe fn setup_render_state(&self, draw_data: &DrawData) {
+        let ctx = &self.context;
+        if let Some(device_objects) = &self.device_objects {
+            let viewport = D3D11_VIEWPORT {
+                TopLeftX: 0.0,
+                TopLeftY: 0.0,
+                Width: draw_data.display_size[0],
+                Height: draw_data.display_size[1],
+                MinDepth: 0.0,
+                MaxDepth: 1.0,
+            };
+
+            ctx.RSSetViewports(&[viewport]);
+
+            let stride = std::mem::size_of::<DrawVert>() as u32;
+            ctx.IASetInputLayout(&device_objects.input_layout);
+            ctx.IASetVertexBuffers(
+                0,
+                1,
+                &self.vertex_buffer.buffer().clone().into(),
+                &stride,
+                &0,
+            );
+            ctx.IASetIndexBuffer(
+                self.index_buffer.buffer(),
+                if std::mem::size_of::<DrawIdx>() == 2 {
+                    DXGI_FORMAT_R16_UINT
+                } else {
+                    DXGI_FORMAT_R32_UINT
+                },
+                0,
+            );
+            ctx.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            ctx.VSSetShader(&device_objects.vertex_shader, &[]);
+            ctx.VSSetConstantBuffers(0, &[device_objects.vertex_constant_buffer.clone().into()]);
+            ctx.PSSetShader(&device_objects.pixel_shader, &[]);
+
+            if let Some(font) = &self.font {
+                ctx.PSSetSamplers(0, &[font.font_sampler.clone().into()]);
+            }
+            ctx.GSSetShader(None, &[]);
+            ctx.HSSetShader(None, &[]);
+            ctx.DSSetShader(None, &[]);
+            ctx.CSSetShader(None, &[]);
+
+            let blend_factor = [0.0; 4];
+            ctx.OMSetBlendState(
+                &device_objects.blend_state,
+                blend_factor.as_ptr(),
+                0xFFFFFFFF,
+            );
+            ctx.OMSetDepthStencilState(&device_objects.depth_stencil_state, 0);
+            ctx.RSSetState(&device_objects.rasterizer_state);
+        }
+    }
+
+    unsafe fn render_cmd_lists(&self, draw_data: &DrawData) {
+        let clip_off = draw_data.display_pos;
+        let clip_scale = draw_data.framebuffer_scale;
+        let mut vertex_offset = 0;
+        let mut index_offset = 0;
+        for draw_list in draw_data.draw_lists() {
+            for cmd in draw_list.commands() {
+                match cmd {
+                    DrawCmd::RawCallback { callback, raw_cmd } => {
+                        callback(draw_list.raw(), raw_cmd)
+                    }
+                    DrawCmd::ResetRenderState => self.setup_render_state(draw_data),
+                    DrawCmd::Elements { count, cmd_params } => {
+                        // X Y Z W
+                        let clip_min = (
+                            cmd_params.clip_rect[0] - clip_off[0],
+                            cmd_params.clip_rect[1] - clip_off[1],
+                        );
+                        let clip_max = (
+                            cmd_params.clip_rect[2] - clip_off[0],
+                            cmd_params.clip_rect[3] - clip_off[1],
+                        );
+
+                        if clip_max.0 <= clip_min.0 || clip_max.1 <= clip_min.1 {
+                            continue;
+                        }
+
+                        let rect = RECT {
+                            left: (clip_min.0 * clip_scale[0]) as i32,
+                            top: (clip_min.1 * clip_scale[1]) as i32,
+                            right: (clip_max.0 * clip_scale[0]) as i32,
+                            bottom: (clip_max.1 * clip_scale[1]) as i32,
+                        };
+
+                        // Apply scissor/clipping rectangle
+                        self.context.RSSetScissorRects(&[rect]);
+
+                        // Bind texture, Draw
+                        let texture_srv: ID3D11ShaderResourceView =
+                            std::mem::transmute(cmd_params.texture_id.id());
+                        self.context
+                            .PSSetShaderResources(0, &[texture_srv.clone().into()]);
+                        self.context.DrawIndexed(
+                            count as u32,
+                            (cmd_params.idx_offset + index_offset) as u32,
+                            (cmd_params.vtx_offset + vertex_offset) as i32,
+                        );
+
+                        // We do not own the SRV, so 'leak' it. It is up to the
+                        // owning container that the SRV is properly disposed of.
+                        std::mem::forget(texture_srv);
+                    }
+                }
+            }
+
+            vertex_offset += draw_list.vtx_buffer().len();
+            index_offset += draw_list.idx_buffer().len();
+        }
     }
 }

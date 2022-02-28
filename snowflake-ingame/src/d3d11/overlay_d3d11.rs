@@ -8,7 +8,7 @@ use windows::Win32::Graphics::Direct3D11::{
 use windows::Win32::Graphics::Dxgi::IDXGIKeyedMutex;
 use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcess, PROCESS_DUP_HANDLE};
 
-use crate::ipc::cmd::{OverlayTextureEventParams, Size};
+use crate::ipc::cmd::{OverlayTextureEventParams, Dimensions};
 
 pub struct D3D11Overlay {
     keyed_mutex: Option<IDXGIKeyedMutex>,
@@ -16,7 +16,7 @@ pub struct D3D11Overlay {
     texture: Option<ID3D11Texture2D>,
     handle: HANDLE,
     window: HWND,
-    size: Size,
+    size: Dimensions,
     ready_to_paint: bool,
     tex_mutex: Mutex<()>,
 }
@@ -37,7 +37,7 @@ impl D3D11Overlay {
             texture: None,
             handle: HANDLE::default(),
             window: HWND::default(),
-            size: Size::new(0, 0),
+            size: Dimensions::new(0, 0),
             ready_to_paint: false,
             tex_mutex: Mutex::new(()),
         }
@@ -47,7 +47,7 @@ impl D3D11Overlay {
         self.tex_mutex.lock()
     }
 
-    pub fn size_matches_viewpoint(&self, size: &Size) -> bool {
+    pub fn size_matches_viewpoint(&self, size: &Dimensions) -> bool {
         return self.size == *size;
     }
 
@@ -124,11 +124,11 @@ impl D3D11Overlay {
         true
     }
 
-    pub fn paint<F: Sized + FnOnce(usize, u32, u32)>(&self, f: F) {
+    pub fn paint<F: Sized + FnOnce(usize, Dimensions)>(&self, f: F) {
         // addref
         if let Some(srv_handle) = &self.shader_resource_view {
             unsafe {
-                f(std::mem::transmute_copy(&srv_handle), 0, 0);
+                f(std::mem::transmute_copy(&srv_handle), self.size);
             }
             // release
         }

@@ -32,36 +32,36 @@ mod win32;
 unsafe fn main() -> Result<(), Box<dyn Error>> {
     let ctx = Direct3D11HookContext::init()?;
 
-    ctx.new(
-        Box::new(|this, sync, flags, mut next| {
-            let mut context = None;
-
-            unsafe {
-                let device = this.GetDevice::<ID3D11Device>().unwrap();
-                device.GetImmediateContext(&mut context);
-            }
-
-            let context = context.unwrap();
-
-            let mut num = D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE;
-            let mut rects: [RECT;
-                D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE as usize] =
-                Default::default();
-            context.RSGetScissorRects(&mut num, std::mem::transmute(&mut rects));
-
-            for x in std::mem::transmute::<_, &[RECT]>(&rects[..]) {
-                eprintln!("{:?}", x);
-            }
-
-            let fp = next.fp_next();
-            fp(this, sync, flags, next)
-        }),
-        |this, bufc, w, h, format, flags, mut next| {
-            let fp = next.fp_next();
-            fp(this, bufc, w, h, format, flags, next)
-        },
-    )?
-    .persist();
+    // ctx.new(
+    //     Box::new(|this, sync, flags, mut next| {
+    //         let mut context = None;
+    //
+    //         unsafe {
+    //             let device = this.GetDevice::<ID3D11Device>().unwrap();
+    //             device.GetImmediateContext(&mut context);
+    //         }
+    //
+    //         let context = context.unwrap();
+    //
+    //         let mut num = D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE;
+    //         let mut rects: [RECT;
+    //             D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE as usize] =
+    //             Default::default();
+    //         context.RSGetScissorRects(&mut num, std::mem::transmute(&mut rects));
+    //
+    //         for x in std::mem::transmute::<_, &[RECT]>(&rects[..]) {
+    //             eprintln!("{:?}", x);
+    //         }
+    //
+    //         let fp = next.fp_next();
+    //         fp(this, sync, flags, next)
+    //     }),
+    //     |this, bufc, w, h, format, flags, mut next| {
+    //         let fp = next.fp_next();
+    //         fp(this, bufc, w, h, format, flags, next)
+    //     },
+    // )?
+    // .persist();
 
     // let mut ipc = IpcConnectionBuilder::new(Uuid::nil());
     // let mut ipc = ipc.connect()?;

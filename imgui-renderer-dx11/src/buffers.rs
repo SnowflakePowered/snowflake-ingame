@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+
 use windows::core::Result as HResult;
 use windows::Win32::Graphics::Direct3D11::{
     ID3D11Buffer, ID3D11Device, D3D11_BIND_INDEX_BUFFER, D3D11_BIND_VERTEX_BUFFER,
@@ -16,7 +17,9 @@ pub struct ImGuiBuffer<T, const ADD_CAPACITY: usize, const BIND_FLAGS: u32> {
     _draw_ty: PhantomData<T>,
 }
 
-impl<T, const ADD_CAPACITY: usize, const BIND_FLAGS: u32> ImGuiBuffer<T, ADD_CAPACITY, BIND_FLAGS> {
+impl<T, const ADD_CAPACITY: usize, const BIND_FLAGS: u32>
+    ImGuiBuffer<T, { ADD_CAPACITY }, { BIND_FLAGS }>
+{
     pub fn new(device: &ID3D11Device) -> HResult<Self> {
         let (buffer, len) = Self::create_buffer(device, 0)?;
         Ok(ImGuiBuffer {
@@ -25,6 +28,10 @@ impl<T, const ADD_CAPACITY: usize, const BIND_FLAGS: u32> ImGuiBuffer<T, ADD_CAP
             len,
             _draw_ty: PhantomData,
         })
+    }
+
+    pub fn buffer(&self) -> &ID3D11Buffer {
+        &self.buffer
     }
 
     pub fn reserve(&mut self, count: usize) -> HResult<()> {

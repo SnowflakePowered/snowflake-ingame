@@ -117,14 +117,14 @@ impl Debug for GameWindowCommand {
 }
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
-pub struct Size {
+pub struct Dimensions {
     width: u32,
     height: u32,
 }
 
-impl Size {
-    pub fn new(width: u32, height: u32) -> Size {
-        Size { width, height }
+impl Dimensions {
+    pub fn new(width: u32, height: u32) -> Dimensions {
+        Dimensions { width, height }
     }
 }
 
@@ -139,7 +139,7 @@ impl GameWindowCommand {
         }
     }
 
-    pub const fn window_resize(size: &Size) -> GameWindowCommand {
+    pub const fn window_resize(size: &Dimensions) -> GameWindowCommand {
         GameWindowCommand {
             magic: GameWindowMagic::MAGIC,
             ty: GameWindowCommandType::WINDOW_RESIZE,

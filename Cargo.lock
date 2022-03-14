@@ -817,6 +817,7 @@ dependencies = [
  "crossbeam-channel",
  "detour",
  "imgui",
+ "imgui-renderer-dx11",
  "indexmap",
  "opengl-bindings",
  "tokio",

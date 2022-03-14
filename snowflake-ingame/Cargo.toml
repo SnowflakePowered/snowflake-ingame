@@ -35,6 +35,9 @@ features = [
     "Win32_UI_WindowsAndMessaging",
 ]
 
+[target.'cfg(target_os = "windows")'.dependencies.imgui-renderer-dx11]
+path = "../imgui-renderer-dx11"
+
 [dependencies]
 detour = { version = "0.8.1", features = ["nightly"] }
 indexmap = "1.8"

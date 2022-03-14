@@ -1,4 +1,6 @@
 mod backup;
 mod buffers;
 mod device_objects;
-pub mod renderer;
+mod renderer;
+
+pub use renderer::Renderer as Direct3D11ImguiRenderer;

@@ -128,6 +128,20 @@ impl Dimensions {
     }
 }
 
+impl From<[f32; 2]> for Dimensions {
+    fn from(item: [f32; 2]) -> Self {
+        Dimensions {
+            width: item[0] as u32,
+            height: item[1] as u32
+        }
+    }
+}
+
+impl From<Dimensions> for [f32; 2] {
+    fn from(item: Dimensions) -> Self {
+        [item.width as f32, item.height as f32]
+    }
+}
 impl GameWindowCommand {
     pub const fn handshake(uuid: &Uuid) -> GameWindowCommand {
         GameWindowCommand {

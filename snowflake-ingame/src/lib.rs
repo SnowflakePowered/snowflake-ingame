@@ -18,6 +18,7 @@ use windows::Win32::System::Console::AllocConsole;
 use windows::Win32::System::SystemServices::DLL_PROCESS_ATTACH;
 
 use crate::d3d11::hook_d3d11::Direct3D11HookContext;
+use crate::d3d11::kernel_d3d11::Direct3D11Kernel;
 use crate::hook::*;
 use crate::ipc::cmd::GameWindowCommand;
 use crate::ipc::{IpcConnection, IpcConnectionBuilder};
@@ -30,7 +31,16 @@ mod opengl;
 mod win32;
 
 unsafe fn main() -> Result<(), Box<dyn Error>> {
-    let ctx = Direct3D11HookContext::init()?;
+
+    let mut ipc = IpcConnectionBuilder::new(Uuid::nil());
+    let mut ipc = ipc.connect()?;
+
+    let handle = ipc.handle();
+
+    let mut dx11 = Direct3D11Kernel::new(handle)?;
+    dx11.init()?;
+    println!("[dx11] init finish");
+    // let ctx = Direct3D11HookContext::init()?;
 
     // ctx.new(
     //     Box::new(|this, sync, flags, mut next| {
@@ -63,10 +73,6 @@ unsafe fn main() -> Result<(), Box<dyn Error>> {
     // )?
     // .persist();
 
-    // let mut ipc = IpcConnectionBuilder::new(Uuid::nil());
-    // let mut ipc = ipc.connect()?;
-    //
-    // let handle = ipc.handle();
     //
     // let ctx = OpenGLHookContext::init()?;
     //
@@ -79,8 +85,8 @@ unsafe fn main() -> Result<(), Box<dyn Error>> {
     // }))?.persist();
     //
     //
-    // ipc.listen()?;
-    // eprintln!("ipc stop");
+    ipc.listen()?;
+    eprintln!("ipc stop");
     Ok(())
 }
 

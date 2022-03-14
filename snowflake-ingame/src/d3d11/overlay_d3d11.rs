@@ -1,10 +1,11 @@
+use std::mem::MaybeUninit;
 use std::sync::{LockResult, Mutex, MutexGuard};
+use windows::core::Interface;
 use windows::Win32::Foundation::{
     CloseHandle, DuplicateHandle, DUPLICATE_SAME_ACCESS, HANDLE, HWND,
 };
-use windows::Win32::Graphics::Direct3D11::{
-    ID3D11Device1, ID3D11ShaderResourceView, ID3D11Texture2D,
-};
+use windows::Win32::Graphics::Direct3D11::{D3D11_SHADER_RESOURCE_VIEW_DESC, D3D11_SHADER_RESOURCE_VIEW_DESC_0, D3D11_TEX2D_SRV, D3D11_TEXTURE2D_DESC, ID3D11Device1, ID3D11ShaderResourceView, ID3D11Texture2D};
+use windows::Win32::Graphics::Direct3D::D3D11_SRV_DIMENSION_TEXTURE2D;
 use windows::Win32::Graphics::Dxgi::IDXGIKeyedMutex;
 use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcess, PROCESS_DUP_HANDLE};
 
@@ -74,13 +75,62 @@ impl D3D11Overlay {
         self.ready_to_paint = false;
     }
 
+    // todo: make this err type
     pub fn prepare_paint(&mut self, device: ID3D11Device1, output_window: HWND) -> bool {
         if self.ready_to_paint && self.window == output_window {
             return true;
         }
         self.invalidate();
         // todo: rest of this.
-        false
+
+        let tex_2d : ID3D11Texture2D = if let Ok(resource) = unsafe { device.OpenSharedResource1(self.handle) } {
+            resource
+        } else {
+            eprintln!("unable to open shared resource {:?}", self.handle);
+            return false;
+        };
+
+        let tex_mtx: IDXGIKeyedMutex = if let Ok(mtx) = unsafe { Interface::cast(&tex_2d) } {
+            mtx
+        } else {
+            eprintln!("unable to open keyed mutex");
+            return false;
+        };
+
+        let tex_desc = unsafe  {
+            let mut tex_desc = MaybeUninit::uninit();
+            tex_2d.GetDesc(tex_desc.as_mut_ptr());
+            tex_desc.assume_init()
+        };
+
+        let srv_desc = D3D11_SHADER_RESOURCE_VIEW_DESC {
+            Format: tex_desc.Format,
+            ViewDimension: D3D11_SRV_DIMENSION_TEXTURE2D,
+            Anonymous: D3D11_SHADER_RESOURCE_VIEW_DESC_0 {
+                Texture2D: D3D11_TEX2D_SRV {
+                    MipLevels: tex_desc.MipLevels,
+                    MostDetailedMip: 0
+                }
+            }
+        };
+
+        let srv = if let Ok(srv) = unsafe { device.CreateShaderResourceView(&tex_2d, &srv_desc) } {
+            srv
+        } else {
+            eprintln!("unable to create srv");
+            return false;
+        };
+
+        self.keyed_mutex = Some(tex_mtx);
+        self.texture = Some(tex_2d);
+        self.size = Dimensions::new(tex_desc.Width, tex_desc.Height);
+
+        self.shader_resource_view = Some(srv);
+        self.window = output_window;
+        self.ready_to_paint = true;
+
+        eprintln!("success on overlay");
+        true
     }
 
     // todo: make this err type.
@@ -95,17 +145,17 @@ impl D3D11Overlay {
                 return false;
             }
 
-            let mut duped_handle = std::ptr::null_mut();
-            if !DuplicateHandle(
+            let mut duped_handle = MaybeUninit::uninit();
+            if !(DuplicateHandle(
                 process,
                 handle,
                 GetCurrentProcess(),
-                duped_handle,
+                duped_handle.as_mut_ptr(),
                 0,
                 false,
                 DUPLICATE_SAME_ACCESS,
             )
-            .as_bool()
+            .as_bool())
             {
                 eprintln!("unable to duplicate handle");
                 return false;
@@ -114,12 +164,12 @@ impl D3D11Overlay {
             // this doesn't do anything if its already null.
             self.invalidate();
 
-            if !CloseHandle(self.handle).as_bool() {
+            if self.ready_to_initialize() && !(CloseHandle(self.handle).as_bool()) {
                 return false;
             }
 
-            eprintln!("duped handle {:p}", duped_handle);
-            *duped_handle
+            eprintln!("duped handle {:p}", duped_handle.as_ptr());
+            duped_handle.assume_init()
         };
         true
     }

@@ -23,7 +23,6 @@ pub struct D3D11Overlay {
     window: HWND,
     size: Dimensions,
     ready_to_paint: bool,
-    tex_mutex: Mutex<()>,
 }
 
 /* this is hilariously unsafe and probably unsound */
@@ -44,12 +43,7 @@ impl D3D11Overlay {
             window: HWND::default(),
             size: Dimensions::new(0, 0),
             ready_to_paint: false,
-            tex_mutex: Mutex::new(()),
         }
-    }
-
-    pub fn lock(&self) -> LockResult<MutexGuard<()>> {
-        self.tex_mutex.lock()
     }
 
     pub fn size_matches_viewpoint(&self, size: &Dimensions) -> bool {
@@ -85,20 +79,19 @@ impl D3D11Overlay {
             return true;
         }
         self.invalidate();
-        // todo: rest of this.
 
         let tex_2d: ID3D11Texture2D =
             if let Ok(resource) = unsafe { device.OpenSharedResource1(self.handle) } {
                 resource
             } else {
-                eprintln!("unable to open shared resource {:?}", self.handle);
+                eprintln!("[dx11] unable to open shared resource {:?}", self.handle);
                 return false;
             };
 
         let tex_mtx: IDXGIKeyedMutex = if let Ok(mtx) = unsafe { Interface::cast(&tex_2d) } {
             mtx
         } else {
-            eprintln!("unable to open keyed mutex");
+            eprintln!("[dx11] unable to open keyed mutex");
             return false;
         };
 
@@ -122,7 +115,7 @@ impl D3D11Overlay {
         let srv = if let Ok(srv) = unsafe { device.CreateShaderResourceView(&tex_2d, &srv_desc) } {
             srv
         } else {
-            eprintln!("unable to create srv");
+            eprintln!("[dx11] unable to create srv");
             return false;
         };
 
@@ -134,7 +127,7 @@ impl D3D11Overlay {
         self.window = output_window;
         self.ready_to_paint = true;
 
-        eprintln!("success on overlay");
+        eprintln!("[dx11] success on overlay");
         true
     }
 
@@ -162,7 +155,7 @@ impl D3D11Overlay {
             )
             .as_bool())
             {
-                eprintln!("unable to duplicate handle");
+                eprintln!("[dx11] unable to duplicate handle");
                 return false;
             }
 
@@ -173,7 +166,7 @@ impl D3D11Overlay {
                 return false;
             }
 
-            eprintln!("duped handle {:p}", duped_handle.as_ptr());
+            eprintln!("[dx11] duped handle {:p}", duped_handle.as_ptr());
             duped_handle.assume_init()
         };
         true

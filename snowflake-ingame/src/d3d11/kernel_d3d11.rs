@@ -3,24 +3,26 @@ use std::error::Error;
 use std::mem::MaybeUninit;
 use std::pin::Pin;
 use std::ptr;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock, RwLockWriteGuard};
 
-use imgui::{Condition, Context, DrawData, Image, TextureId, Window, WindowFlags};
+use imgui::{Condition, Context, DrawData, Image, StyleVar, TextureId, Window, WindowFlags};
 use tokio::io::AsyncWriteExt;
 use windows::core::Result as HResult;
 use windows::Win32::Foundation::HWND;
-use windows::Win32::Graphics::Direct3D11::{D3D11_TEXTURE2D_DESC, ID3D11Device, ID3D11Device1, ID3D11RenderTargetView, ID3D11Texture2D};
+use windows::Win32::Graphics::Direct3D11::{
+    ID3D11Device, ID3D11Device1, ID3D11RenderTargetView, ID3D11Texture2D, D3D11_TEXTURE2D_DESC,
+};
 use windows::Win32::Graphics::Dxgi::*;
 
-use imgui_renderer_dx11::Direct3D11ImguiRenderer;
+use imgui_renderer_dx11::{Direct3D11ImguiRenderer, RenderToken};
 
-use crate::{Direct3D11HookContext, GameWindowCommand, HookHandle};
 use crate::common::Dimensions;
-use crate::d3d11::hook_d3d11::FnPresentHook;
+use crate::d3d11::hook_d3d11::{FnPresentHook, FnResizeBuffersHook};
 use crate::d3d11::overlay_d3d11::D3D11Overlay;
 use crate::hook::HookChain;
 use crate::ipc::cmd::GameWindowCommandType;
 use crate::ipc::IpcHandle;
+use crate::{Direct3D11HookContext, GameWindowCommand, HookHandle};
 
 /// Kernel for a D3D11 hook.
 ///
@@ -48,13 +50,8 @@ pub struct Render<'a> {
 }
 
 impl Render<'_> {
-    pub fn render(mut self, draw_data: &DrawData) -> HResult<()>{
+    pub fn render(mut self, draw_data: &DrawData) -> HResult<()> {
         if let Some(renderer) = self.render {
-            // for now don't need to set rtv..? Not sure what the implications are, maybe doesn't
-            // work for all emulators?
-            if let Some(rtv) = self.rtv {
-                // todo: set rtv
-            }
             renderer.render(draw_data)?;
         }
         Ok(())
@@ -68,7 +65,7 @@ impl D3D11ImguiController {
             renderer: None,
             device: None,
             window: HWND(0),
-            rtv: None
+            rtv: None,
         }
     }
 
@@ -80,12 +77,17 @@ impl D3D11ImguiController {
         self.rtv.is_some()
     }
 
-    pub fn frame<'a, F: FnOnce(&mut Context, Render, &mut D3D11Overlay)>(&mut self, overlay: &mut D3D11Overlay, f: F) {
+    // todo: use RenderToken POW
+    pub fn frame<'a, F: FnOnce(&mut Context, Render, &mut D3D11Overlay) -> ()>(
+        &mut self,
+        overlay: &mut D3D11Overlay,
+        f: F,
+    ) {
         let renderer = Render {
             render: self.renderer.as_mut(),
-            rtv: self.rtv.as_ref()
+            rtv: self.rtv.as_ref(),
         };
-        f(&mut self.imgui, renderer, overlay)
+        f(&mut self.imgui, renderer, overlay);
     }
 
     unsafe fn init_renderer(&mut self, swapchain: &IDXGISwapChain, window: HWND) -> HResult<()> {
@@ -132,7 +134,8 @@ impl D3D11ImguiController {
     }
 
     pub fn prepare_paint(&mut self, swapchain: &IDXGISwapChain, screen_dim: Dimensions) -> bool {
-        let swap_desc: DXGI_SWAP_CHAIN_DESC = if let Ok(swap_desc) = unsafe { swapchain.GetDesc() } {
+        let swap_desc: DXGI_SWAP_CHAIN_DESC = if let Ok(swap_desc) = unsafe { swapchain.GetDesc() }
+        {
             swap_desc
         } else {
             eprintln!("[dx11] unable to get swapchain desc");
@@ -152,12 +155,12 @@ impl D3D11ImguiController {
         }
 
         // todo: fix rtv reset
-        // if !self.rtv_ready() {
-        //     if let Err(_) = unsafe { self.init_rtv(&swapchain) } {
-        //         eprintln!("[dx11] unable to set render target view");
-        //         return false;
-        //     }
-        // }
+        if !self.rtv_ready() {
+            if let Err(_) = unsafe { self.init_rtv(&swapchain) } {
+                eprintln!("[dx11] unable to set render target view");
+                return false;
+            }
+        }
 
         // set screen size..
         self.imgui.io_mut().display_size = screen_dim.into();
@@ -179,101 +182,129 @@ impl Direct3D11Kernel {
         })
     }
 
+    unsafe fn present_impl(
+        handle: IpcHandle,
+        mut overlay: RwLockWriteGuard<D3D11Overlay>,
+        mut imgui: RwLockWriteGuard<D3D11ImguiController>,
+        this: &IDXGISwapChain,
+    ) -> Result<(), Box<dyn Error>> {
+        // Handle update of any overlay here.
+        if let Ok(cmd) = handle.try_recv() {
+            match &cmd.ty {
+                &GameWindowCommandType::OVERLAY => {
+                    eprintln!("[dx11] received overlay texture event");
+                    overlay.refresh(unsafe { cmd.params.overlay_event });
+                }
+                _ => {}
+            }
+        }
+
+        let swapchain_desc = this.GetDesc()?;
+        let backbuffer = this.GetBuffer::<ID3D11Texture2D>(0)?;
+
+        let mut backbuffer_desc: D3D11_TEXTURE2D_DESC = Default::default();
+        backbuffer.GetDesc(&mut backbuffer_desc);
+
+        let size = backbuffer_desc.into();
+        if !overlay.size_matches_viewpoint(&size) {
+            handle.send(GameWindowCommand::window_resize(&size))?;
+        }
+
+        if !overlay.ready_to_initialize() {
+            eprintln!("[dx11] Texture handle not ready");
+            return Ok::<_, Box<dyn Error>>(());
+        }
+
+        let device = this.GetDevice::<ID3D11Device1>()?;
+
+        if !overlay.prepare_paint(device, swapchain_desc.OutputWindow) {
+            eprintln!("[dx11] Failed to refresh texture for output window");
+            return Ok::<_, Box<dyn Error>>(());
+        }
+
+        if !imgui.prepare_paint(&this, size) {
+            eprintln!("[dx11] Failed to setup imgui render state");
+            return Ok::<_, Box<dyn Error>>(());
+        }
+
+        // imgui stuff here.
+        // We don't need an external mutex here because the overlay will not change underneath us,
+        // since overlay is updated within Present now.
+        if overlay.acquire_sync() {
+            imgui.frame(&mut overlay, |ctx, render, overlay| {
+                let ui = ctx.frame();
+
+                overlay.paint(|tid, dim| {
+                    let _style_pad = ui.push_style_var(StyleVar::WindowPadding([0.0, 0.0]));
+                    let _style_border = ui.push_style_var(StyleVar::WindowBorderSize(0.0));
+                    Window::new("BrowserWindow")
+                        .size(dim.into(), Condition::Always)
+                        .position([0.0, 0.0], Condition::Always)
+                        .flags(
+                            WindowFlags::NO_DECORATION
+                                | WindowFlags::NO_MOVE
+                                | WindowFlags::NO_RESIZE
+                                | WindowFlags::NO_BACKGROUND,
+                        )
+                        .no_decoration()
+                        .build(&ui, || {
+                            Image::new(TextureId::new(tid), dim.into()).build(&ui)
+                        })
+                        .unwrap_or_else(|| eprintln!("[imgui] Unable to build window"));
+                });
+                ui.show_demo_window(&mut false);
+                render.render(ui.render()).unwrap()
+            });
+
+            overlay.release_sync();
+        }
+
+        Ok::<_, Box<dyn Error>>(())
+    }
+
+    fn resize_impl(mut imgui: RwLockWriteGuard<D3D11ImguiController>) {
+        imgui.invalidate_rtv();
+    }
+
     fn make_present(&self) -> FnPresentHook {
         let handle = self.ipc.clone();
         let overlay = self.overlay.clone();
         let imgui = self.imgui.clone();
         Box::new(
             move |this: IDXGISwapChain, sync: u32, flags: u32, mut next| {
-                let handle = handle.clone();
-                let overlay = overlay.clone();
-                let imgui = imgui.clone();
-                (|| unsafe {
-                    let mut overlay = overlay.write()?;
-                    let mut imgui = imgui.write()?;
+                if let (Ok(overlay), Ok(imgui)) = (overlay.write(), imgui.write()) {
+                    let handle = handle.clone();
+                    unsafe { Direct3D11Kernel::present_impl(handle, overlay, imgui, &this) }
+                        .unwrap_or(());
+                } else {
+                    eprintln!("[dx11] unable to acquire overlay write guards")
+                }
 
-                    // Handle update of any overlay here.
-                    if let Ok(cmd) = handle.try_recv() {
-                        match &cmd.ty {
-                            &GameWindowCommandType::OVERLAY => {
-                                eprintln!("[dx11] received overlay texture event");
-                                overlay.refresh(unsafe { cmd.params.overlay_event });
-                            }
-                            _ => {}
-                        }
-                    }
-
-                    let swapchain_desc = this.GetDesc()?;
-                    let backbuffer = this.GetBuffer::<ID3D11Texture2D>(0)?;
-
-                    let mut backbuffer_desc: D3D11_TEXTURE2D_DESC = Default::default();
-                    backbuffer.GetDesc(&mut backbuffer_desc);
-
-                    let size = backbuffer_desc.into();
-                    if !overlay.size_matches_viewpoint(&size) {
-                        handle.send(GameWindowCommand::window_resize(&size))?;
-                    }
-
-                    if !overlay.ready_to_initialize() {
-                        eprintln!("[dx11] Texture handle not ready");
-                        return Ok::<_, Box<dyn Error>>(());
-                    }
-
-                    let device = this.GetDevice::<ID3D11Device1>()?;
-
-                    if !overlay.prepare_paint(device, swapchain_desc.OutputWindow) {
-                        eprintln!("[dx11] Failed to refresh texture for output window");
-                        return Ok::<_, Box<dyn Error>>(());
-                    }
-
-                    if !imgui.prepare_paint(&this, size) {
-                        eprintln!("[dx11] Failed to setup imgui render state");
-                        return Ok::<_, Box<dyn Error>>(());
-                    }
-
-                    // imgui stuff here.
-                    // We don't need an external mutex here because the overlay will not change underneath us,
-                    // since overlay is updated within Present now.
-                    if overlay.acquire_sync() {
-                        imgui.frame(&mut overlay, |ctx, render, overlay| {
-                           let ui = ctx.frame();
-                            overlay.paint(|tid, dim| {
-                                Window::new("BrowserWindow")
-                                    .size(dim.into(), Condition::Always)
-                                    .position([0.0, 0.0], Condition::Always)
-                                    .flags(WindowFlags::NO_DECORATION | WindowFlags:: NO_MOVE | WindowFlags:: NO_RESIZE | WindowFlags::NO_BACKGROUND)
-                                    .no_decoration()
-                                    .build(&ui, || {
-                                        Image::new(TextureId::new(tid),dim.into())
-                                            .build(&ui)
-                                    }).unwrap();
-                            });
-                            ui.show_demo_window(&mut false);
-                            render.render(ui.render()).unwrap();
-                        });
-
-                        overlay.release_sync();
-                    }
-
-                    Ok::<_, Box<dyn Error>>(())
-                })()
-                .unwrap_or(());
                 let fp = next.fp_next();
                 fp(this, sync, flags, next)
             },
         )
     }
 
+    fn make_resize(&self) -> FnResizeBuffersHook {
+        let imgui = self.imgui.clone();
+        Box::new(
+            move |this: IDXGISwapChain, buf_cnt, width, height, format, flags, mut next| {
+                if let Ok(imgui) = imgui.write() {
+                    Direct3D11Kernel::resize_impl(imgui);
+                }
+
+                let fp = next.fp_next();
+                fp(this, buf_cnt, width, height, format, flags, next)
+            },
+        )
+    }
+
     pub fn init(&mut self) -> Result<(), Box<dyn Error>> {
         println!("[dx11] init");
-        self.hook.new(
-            self.make_present(),
-            |this, bufc, w, h, format, flags, mut next| {
-                println!("[dx11] rsz");
-                let fp = next.fp_next();
-                fp(this, bufc, w, h, format, flags, next)
-            },
-        )?.persist();
+        self.hook
+            .new(self.make_present(), self.make_resize())?
+            .persist();
 
         Ok(())
     }

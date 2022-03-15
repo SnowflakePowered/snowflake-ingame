@@ -1,3 +1,4 @@
+use std::marker::PhantomData;
 use imgui::internal::RawWrapper;
 use imgui::{DrawCmd, DrawData, DrawIdx, DrawVert, Textures};
 use windows::core::Result as HResult;
@@ -17,6 +18,8 @@ use crate::device_objects::{FontTexture, RendererDeviceObjects};
 pub(crate) struct VertexConstantBuffer {
     mvp: [[f32; 4]; 4],
 }
+
+pub struct RenderToken<'a>(PhantomData<&'a ()>);
 
 #[derive(Debug)]
 pub struct Renderer {
@@ -68,13 +71,13 @@ impl Renderer {
         Ok(())
     }
 
-    pub fn render(&mut self, draw_data: &DrawData) -> HResult<()> {
+    pub fn render<'a>(&mut self, draw_data: &DrawData) -> HResult<RenderToken<'a>> {
         // Avoid rendering when minimized
         if draw_data.display_size[0] <= 0.0
             || draw_data.display_size[1] <= 0.0
             || draw_data.draw_lists_count() == 0
         {
-            return Ok(());
+            return Ok(RenderToken(PhantomData));
         }
 
         self.vertex_buffer
@@ -89,7 +92,7 @@ impl Renderer {
             self.render_cmd_lists(draw_data);
             drop(state)
         }
-        Ok(())
+        Ok(RenderToken(PhantomData))
     }
 
     // upload vertex/index data into a single contiguous GPU buffer

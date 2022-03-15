@@ -93,15 +93,9 @@ fn get_vtables() -> Result<VTables, Box<dyn Error>> {
 pub type FnPresentHook =
     Box<dyn Send + Sync + Fn(IDXGISwapChain, u32, u32, PresentContext) -> windows::core::HRESULT>;
 
-pub type FnResizeBuffersHook = fn(
-    this: IDXGISwapChain,
-    buffercount: u32,
-    width: u32,
-    height: u32,
-    new_format: DXGI_FORMAT,
-    swapchain_flags: u32,
-    next: ResizeBuffersContext,
-) -> windows::core::HRESULT;
+pub type FnResizeBuffersHook = Box<dyn Send + Sync + Fn(
+    IDXGISwapChain, u32, u32, u32, DXGI_FORMAT, u32, ResizeBuffersContext,
+) -> windows::core::HRESULT>;
 
 static_detour! {
     static PRESENT_DETOUR: extern "system" fn(IDXGISwapChain, u32, u32) -> windows::core::HRESULT;
@@ -133,7 +127,7 @@ impl Direct3D11HookContext {
         }
 
         hook_link_chain! {
-            link RESIZE_BUFFERS_CHAIN with RESIZE_BUFFERS_DETOUR => this, count, width, height, format, flags;
+            box link RESIZE_BUFFERS_CHAIN with RESIZE_BUFFERS_DETOUR => this, count, width, height, format, flags;
         }
 
         unsafe {
@@ -160,15 +154,16 @@ impl Direct3D11HookContext {
         resize_buffers: FnResizeBuffersHook,
     ) -> Result<Direct3D11HookHandle, Box<dyn Error>> {
         let present_key = hook_key!(box present);
+        let resize_key = hook_key!(box resize_buffers);
         PRESENT_CHAIN.write()?.insert(present_key, present);
 
         RESIZE_BUFFERS_CHAIN
             .write()?
-            .insert(resize_buffers as *const () as usize, resize_buffers);
+            .insert(resize_key, resize_buffers);
 
         Ok(Direct3D11HookHandle {
             present_handle: present_key,
-            resize_buffers_handle: resize_buffers as *const () as usize,
+            resize_buffers_handle: resize_key,
         })
     }
 }

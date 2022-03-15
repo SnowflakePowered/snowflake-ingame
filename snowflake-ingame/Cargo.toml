@@ -43,7 +43,6 @@ detour = { version = "0.8.1", features = ["nightly"] }
 indexmap = "1.8"
 opengl-bindings = { path = "../opengl-bindings" }
 tokio = { version = "1.17.0", features = ["full"] }
-
 uuid = "0.8"
 crossbeam-channel = "0.5"
 imgui = "0.8.2"

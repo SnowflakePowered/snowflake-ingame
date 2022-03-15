@@ -1,6 +1,6 @@
 use crate::common::Dimensions;
 use std::mem::MaybeUninit;
-use std::sync::{LockResult, Mutex, MutexGuard};
+use imgui::TextureId;
 use windows::core::Interface;
 use windows::Win32::Foundation::{
     CloseHandle, DuplicateHandle, DUPLICATE_SAME_ACCESS, HANDLE, HWND,
@@ -8,10 +8,11 @@ use windows::Win32::Foundation::{
 use windows::Win32::Graphics::Direct3D::D3D11_SRV_DIMENSION_TEXTURE2D;
 use windows::Win32::Graphics::Direct3D11::{
     ID3D11Device1, ID3D11ShaderResourceView, ID3D11Texture2D, D3D11_SHADER_RESOURCE_VIEW_DESC,
-    D3D11_SHADER_RESOURCE_VIEW_DESC_0, D3D11_TEX2D_SRV, D3D11_TEXTURE2D_DESC,
+    D3D11_SHADER_RESOURCE_VIEW_DESC_0, D3D11_TEX2D_SRV,
 };
 use windows::Win32::Graphics::Dxgi::IDXGIKeyedMutex;
 use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcess, PROCESS_DUP_HANDLE};
+use imgui_renderer_dx11::ImguiTexture;
 
 use crate::ipc::cmd::OverlayTextureEventParams;
 
@@ -172,12 +173,9 @@ impl D3D11Overlay {
         true
     }
 
-    pub fn paint<F: Sized + FnOnce(usize, Dimensions)>(&self, f: F) {
+    pub fn paint<F: Sized + FnOnce(TextureId, Dimensions)>(&self, f: F) {
         if let Some(srv_handle) = &self.shader_resource_view {
-            unsafe {
-                let srv = srv_handle.clone();
-                f(std::mem::transmute(srv), self.size);
-            }
+            f(srv_handle.as_tex_id(), self.size);
         }
     }
 }

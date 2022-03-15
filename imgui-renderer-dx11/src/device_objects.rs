@@ -19,6 +19,7 @@ use windows::Win32::Graphics::Direct3D::D3D11_SRV_DIMENSION_TEXTURE2D;
 use windows::Win32::Graphics::Dxgi::Common::{
     DXGI_FORMAT_R32G32_FLOAT, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SAMPLE_DESC,
 };
+use crate::ImguiTexture;
 
 use crate::renderer::VertexConstantBuffer;
 
@@ -44,14 +45,7 @@ pub(crate) struct FontTexture {
 
 impl FontTexture {
     pub fn tex_id(&self) -> imgui::TextureId {
-        unsafe {
-            // todo: check if transmute is needed instead
-            // This is incredibly unsafe.
-            let srv = self.font_resource_view.clone();
-            TextureId::from(
-                std::mem::transmute::<_, *const ()>(srv) as usize,
-            )
-        }
+        self.font_resource_view.as_tex_id()
     }
 
     pub fn new(

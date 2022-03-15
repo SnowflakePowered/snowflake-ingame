@@ -12,6 +12,7 @@ use tokio::runtime::Runtime;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::{io, time};
 use uuid::Uuid;
+use uuid::Variant::Future;
 
 use crate::ipc::cmd::{GameWindowCommand, GameWindowCommandType};
 use crate::ipc::IpcConnectError::InvalidHandshake;
@@ -181,7 +182,7 @@ impl IpcConnection {
                                 continue;
                             }
                             Err(e) => {
-                                return Err(e.into());
+                                return Err::<(), io::Error>(e.into());
                             }
                         }
                     }
@@ -197,7 +198,7 @@ impl IpcConnection {
                                         continue;
                                     }
                                     Err(e) => {
-                                        return Err(e.into());
+                                        return Err::<(), io::Error>(e.into());
                                     }
                                 }
                             }
@@ -205,7 +206,6 @@ impl IpcConnection {
                         }
                     }
                 }
-                Ok::<_, io::Error>(())
             })
             .unwrap();
         eprintln!("loop done");

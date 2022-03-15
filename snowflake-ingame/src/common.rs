@@ -1,3 +1,4 @@
+use imgui::{Condition, Image, StyleVar, TextureId, Ui, Window, WindowFlags};
 use windows::Win32::Graphics::Direct3D11::D3D11_TEXTURE2D_DESC;
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
@@ -36,3 +37,24 @@ impl From<D3D11_TEXTURE2D_DESC> for Dimensions {
     }
 }
 
+pub struct OverlayWindow;
+impl OverlayWindow {
+    pub fn new(ui: &Ui, tid: TextureId, dim: Dimensions) {
+        let _style_pad = ui.push_style_var(StyleVar::WindowPadding([0.0, 0.0]));
+        let _style_border = ui.push_style_var(StyleVar::WindowBorderSize(0.0));
+        // We don't care if the window isn't rendered.
+        Window::new("BrowserWindow")
+            .size(dim.into(), Condition::Always)
+            .position([0.0, 0.0], Condition::Always)
+            .flags(
+                WindowFlags::NO_DECORATION
+                    | WindowFlags::NO_MOVE
+                    | WindowFlags::NO_RESIZE
+                    | WindowFlags::NO_BACKGROUND,
+            )
+            .no_decoration()
+            .build(ui, || {
+                Image::new(tid, dim.into()).build(ui)
+            }).unwrap_or(())
+    }
+}

@@ -253,9 +253,13 @@ impl Renderer {
                         // Apply scissor/clipping rectangle
                         self.context.RSSetScissorRects(&[rect]);
 
-                        // Bind texture, Draw
+
+
+                        // srv will be dropped after rendering.
                         let texture_srv: ID3D11ShaderResourceView =
                             std::mem::transmute(cmd_params.texture_id.id());
+
+                        // Bind texture, Draw
                         self.context
                             .PSSetShaderResources(0, &[texture_srv.clone().into()]);
                         self.context.DrawIndexed(

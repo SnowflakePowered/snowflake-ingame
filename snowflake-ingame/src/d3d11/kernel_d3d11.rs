@@ -16,7 +16,7 @@ use windows::Win32::Graphics::Dxgi::*;
 
 use imgui_renderer_dx11::{Direct3D11ImguiRenderer, RenderToken};
 
-use crate::common::Dimensions;
+use crate::common::{Dimensions, OverlayWindow};
 use crate::d3d11::hook_d3d11::{FnPresentHook, FnResizeBuffersHook};
 use crate::d3d11::overlay_d3d11::D3D11Overlay;
 use crate::hook::HookChain;
@@ -154,7 +154,6 @@ impl D3D11ImguiController {
             }
         }
 
-        // todo: fix rtv reset
         if !self.rtv_ready() {
             if let Err(_) = unsafe { self.init_rtv(&swapchain) } {
                 eprintln!("[dx11] unable to set render target view");
@@ -233,25 +232,7 @@ impl Direct3D11Kernel {
         if overlay.acquire_sync() {
             imgui.frame(&mut overlay, |ctx, render, overlay| {
                 let ui = ctx.frame();
-
-                overlay.paint(|tid, dim| {
-                    let _style_pad = ui.push_style_var(StyleVar::WindowPadding([0.0, 0.0]));
-                    let _style_border = ui.push_style_var(StyleVar::WindowBorderSize(0.0));
-                    Window::new("BrowserWindow")
-                        .size(dim.into(), Condition::Always)
-                        .position([0.0, 0.0], Condition::Always)
-                        .flags(
-                            WindowFlags::NO_DECORATION
-                                | WindowFlags::NO_MOVE
-                                | WindowFlags::NO_RESIZE
-                                | WindowFlags::NO_BACKGROUND,
-                        )
-                        .no_decoration()
-                        .build(&ui, || {
-                            Image::new(TextureId::new(tid), dim.into()).build(&ui)
-                        })
-                        .unwrap_or_else(|| eprintln!("[imgui] Unable to build window"));
-                });
+                overlay.paint(|tid, dim|  OverlayWindow::new(&ui, tid, dim));
                 ui.show_demo_window(&mut false);
                 render.render(ui.render()).unwrap()
             });

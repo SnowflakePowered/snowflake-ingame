@@ -3,10 +3,7 @@ use windows::core::{PCSTR, PSTR};
 
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleA;
-use windows::Win32::UI::WindowsAndMessaging::{
-    CloseWindow, CreateWindowExA, DefWindowProcA, RegisterClassExA, UnregisterClassA, CS_HREDRAW,
-    CS_VREDRAW, WNDCLASSEXA, WS_OVERLAPPEDWINDOW,
-};
+use windows::Win32::UI::WindowsAndMessaging::{CloseWindow, CreateWindowExA, DefWindowProcA, RegisterClassExA, UnregisterClassA, CS_HREDRAW, CS_VREDRAW, WNDCLASSEXA, WS_OVERLAPPEDWINDOW, DestroyWindow};
 
 pub struct TempWindow<'a>(WNDCLASSEXA, HWND, &'a [u8]);
 
@@ -58,12 +55,6 @@ impl TempWindow<'_> {
     }
 }
 
-impl Into<HWND> for TempWindow<'_> {
-    fn into(self) -> HWND {
-        self.1
-    }
-}
-
 impl Into<HWND> for &TempWindow<'_> {
     fn into(self) -> HWND {
         self.1
@@ -73,7 +64,7 @@ impl Into<HWND> for &TempWindow<'_> {
 impl Drop for TempWindow<'_> {
     fn drop(&mut self) {
         unsafe {
-            CloseWindow(self.1);
+            DestroyWindow(self.1);
             UnregisterClassA(self.0.lpszClassName, self.0.hInstance);
         }
     }

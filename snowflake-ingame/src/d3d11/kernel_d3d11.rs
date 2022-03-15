@@ -1,22 +1,25 @@
-use imgui::{Context, DrawData, Image, Ui, Window};
-use imgui_renderer_dx11::Direct3D11ImguiRenderer;
-use std::borrow::{Borrow, BorrowMut};
-use std::cell::RefCell;
+use std::borrow::Borrow;
 use std::error::Error;
 use std::mem::MaybeUninit;
 use std::pin::Pin;
+use std::ptr;
 use std::sync::{Arc, RwLock};
-use tokio::io::{AsyncWriteExt, Interest};
+
+use imgui::{Condition, Context, DrawData, Image, TextureId, Window, WindowFlags};
+use tokio::io::AsyncWriteExt;
 use windows::core::Result as HResult;
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::Direct3D11::{D3D11_TEXTURE2D_DESC, ID3D11Device, ID3D11Device1, ID3D11RenderTargetView, ID3D11Texture2D};
 use windows::Win32::Graphics::Dxgi::*;
 
+use imgui_renderer_dx11::Direct3D11ImguiRenderer;
+
 use crate::{Direct3D11HookContext, GameWindowCommand, HookHandle};
+use crate::common::Dimensions;
 use crate::d3d11::hook_d3d11::FnPresentHook;
 use crate::d3d11::overlay_d3d11::D3D11Overlay;
 use crate::hook::HookChain;
-use crate::ipc::cmd::{Dimensions, GameWindowCommandType};
+use crate::ipc::cmd::GameWindowCommandType;
 use crate::ipc::IpcHandle;
 
 /// Kernel for a D3D11 hook.
@@ -36,11 +39,12 @@ pub struct D3D11ImguiController {
     renderer: Option<Direct3D11ImguiRenderer>,
     device: Option<ID3D11Device>,
     window: HWND,
-    rtv: Option<ID3D11RenderTargetView>
+    rtv: Option<ID3D11RenderTargetView>,
 }
 
 pub struct Render<'a> {
-    render: Option<&'a mut Direct3D11ImguiRenderer>
+    render: Option<&'a mut Direct3D11ImguiRenderer>,
+    rtv: Option<&'a ID3D11RenderTargetView>,
 }
 
 impl Render<'_> {
@@ -48,7 +52,9 @@ impl Render<'_> {
         if let Some(renderer) = self.render {
             // for now don't need to set rtv..? Not sure what the implications are, maybe doesn't
             // work for all emulators?
-
+            if let Some(rtv) = self.rtv {
+                // todo: set rtv
+            }
             renderer.render(draw_data)?;
         }
         Ok(())
@@ -76,7 +82,8 @@ impl D3D11ImguiController {
 
     pub fn frame<'a, F: FnOnce(&mut Context, Render, &mut D3D11Overlay)>(&mut self, overlay: &mut D3D11Overlay, f: F) {
         let renderer = Render {
-            render: self.renderer.as_mut()
+            render: self.renderer.as_mut(),
+            rtv: self.rtv.as_ref()
         };
         f(&mut self.imgui, renderer, overlay)
     }
@@ -98,13 +105,31 @@ impl D3D11ImguiController {
         self.rtv = None;
     }
 
-    // unsafe fn init_rtv(&mut self, swapchain: &IDXGISwapChain) -> HResult<()> {
-    //     let device: ID3D11Device = swapchain.GetDevice()?;
-    //     let back_buffer : ID3D11Texture2D = swapchain.GetBuffer(0)?;
-    //     let rtv = device.CreateRenderTargetView(back_buffer, std::ptr::null())?;
-    //     self.rtv = Some(rtv);
-    //     Ok(())
-    // }
+    unsafe fn init_rtv(&mut self, swapchain: &IDXGISwapChain) -> HResult<()> {
+        let device: ID3D11Device = swapchain.GetDevice()?;
+        let context = {
+            let mut context = MaybeUninit::uninit();
+            device.GetImmediateContext(context.as_mut_ptr());
+            context.assume_init()
+        };
+
+        let mut rtv = [None];
+        if let Some(context) = &context {
+            context.OMGetRenderTargets(&mut rtv, ptr::null_mut());
+        }
+
+        if let Some(Some(rtv)) = rtv.into_iter().next() {
+            self.rtv = Some(rtv)
+        } else {
+            let back_buffer: ID3D11Texture2D = swapchain.GetBuffer(0)?;
+            let rtv = device.CreateRenderTargetView(back_buffer, std::ptr::null())?;
+            if let Some(context) = &context {
+                context.OMSetRenderTargets(&[Some(rtv.clone())], None);
+            }
+            self.rtv = Some(rtv);
+        }
+        Ok(())
+    }
 
     pub fn prepare_paint(&mut self, swapchain: &IDXGISwapChain, screen_dim: Dimensions) -> bool {
         let swap_desc: DXGI_SWAP_CHAIN_DESC = if let Ok(swap_desc) = unsafe { swapchain.GetDesc() } {
@@ -116,7 +141,7 @@ impl D3D11ImguiController {
 
         if swap_desc.OutputWindow != self.window {
             self.invalidate_renderer();
-            // self.invalidate_rtv();
+            self.invalidate_rtv();
         }
 
         if !self.renderer_ready() {
@@ -125,6 +150,14 @@ impl D3D11ImguiController {
                 return false;
             }
         }
+
+        // todo: fix rtv reset
+        // if !self.rtv_ready() {
+        //     if let Err(_) = unsafe { self.init_rtv(&swapchain) } {
+        //         eprintln!("[dx11] unable to set render target view");
+        //         return false;
+        //     }
+        // }
 
         // set screen size..
         self.imgui.io_mut().display_size = screen_dim.into();
@@ -176,7 +209,7 @@ impl Direct3D11Kernel {
                     let mut backbuffer_desc: D3D11_TEXTURE2D_DESC = Default::default();
                     backbuffer.GetDesc(&mut backbuffer_desc);
 
-                    let size = Dimensions::new(backbuffer_desc.Width, backbuffer_desc.Height);
+                    let size = backbuffer_desc.into();
                     if !overlay.size_matches_viewpoint(&size) {
                         handle.send(GameWindowCommand::window_resize(&size))?;
                     }
@@ -193,12 +226,28 @@ impl Direct3D11Kernel {
                         return Ok::<_, Box<dyn Error>>(());
                     }
 
+                    if !imgui.prepare_paint(&this, size) {
+                        eprintln!("[dx11] Failed to setup imgui render state");
+                        return Ok::<_, Box<dyn Error>>(());
+                    }
+
                     // imgui stuff here.
                     // We don't need an external mutex here because the overlay will not change underneath us,
                     // since overlay is updated within Present now.
                     if overlay.acquire_sync() {
                         imgui.frame(&mut overlay, |ctx, render, overlay| {
                            let ui = ctx.frame();
+                            overlay.paint(|tid, dim| {
+                                Window::new("BrowserWindow")
+                                    .size(dim.into(), Condition::Always)
+                                    .position([0.0, 0.0], Condition::Always)
+                                    .flags(WindowFlags::NO_DECORATION | WindowFlags:: NO_MOVE | WindowFlags:: NO_RESIZE | WindowFlags::NO_BACKGROUND)
+                                    .no_decoration()
+                                    .build(&ui, || {
+                                        Image::new(TextureId::new(tid),dim.into())
+                                            .build(&ui)
+                                    }).unwrap();
+                            });
                             ui.show_demo_window(&mut false);
                             render.render(ui.render()).unwrap();
                         });

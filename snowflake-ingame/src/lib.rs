@@ -29,6 +29,7 @@ mod hook;
 mod ipc;
 mod opengl;
 mod win32;
+mod common;
 
 unsafe fn main() -> Result<(), Box<dyn Error>> {
 

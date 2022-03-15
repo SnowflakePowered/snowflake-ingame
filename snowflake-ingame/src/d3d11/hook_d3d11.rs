@@ -52,7 +52,7 @@ fn get_vtables() -> Result<VTables, Box<dyn Error>> {
         },
         BufferUsage: DXGI_USAGE_RENDER_TARGET_OUTPUT,
         BufferCount: 1,
-        OutputWindow: wnd.into(),
+        OutputWindow: (&wnd).into(),
         Windowed: BOOL(1),
         SwapEffect: DXGI_SWAP_EFFECT_DISCARD,
         Flags: 0,

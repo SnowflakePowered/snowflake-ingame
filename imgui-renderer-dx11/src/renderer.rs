@@ -260,10 +260,6 @@ impl Renderer {
                             (cmd_params.idx_offset + index_offset) as u32,
                             (cmd_params.vtx_offset + vertex_offset) as i32,
                         );
-
-                        // We do not own the SRV, so 'leak' it. It is up to the
-                        // owning container that the SRV is properly disposed of.
-                        std::mem::forget(texture_srv);
                     }
                 }
             }

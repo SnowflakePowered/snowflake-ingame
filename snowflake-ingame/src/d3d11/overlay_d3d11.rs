@@ -1,15 +1,19 @@
+use crate::common::Dimensions;
 use std::mem::MaybeUninit;
 use std::sync::{LockResult, Mutex, MutexGuard};
 use windows::core::Interface;
 use windows::Win32::Foundation::{
     CloseHandle, DuplicateHandle, DUPLICATE_SAME_ACCESS, HANDLE, HWND,
 };
-use windows::Win32::Graphics::Direct3D11::{D3D11_SHADER_RESOURCE_VIEW_DESC, D3D11_SHADER_RESOURCE_VIEW_DESC_0, D3D11_TEX2D_SRV, D3D11_TEXTURE2D_DESC, ID3D11Device1, ID3D11ShaderResourceView, ID3D11Texture2D};
 use windows::Win32::Graphics::Direct3D::D3D11_SRV_DIMENSION_TEXTURE2D;
+use windows::Win32::Graphics::Direct3D11::{
+    ID3D11Device1, ID3D11ShaderResourceView, ID3D11Texture2D, D3D11_SHADER_RESOURCE_VIEW_DESC,
+    D3D11_SHADER_RESOURCE_VIEW_DESC_0, D3D11_TEX2D_SRV, D3D11_TEXTURE2D_DESC,
+};
 use windows::Win32::Graphics::Dxgi::IDXGIKeyedMutex;
 use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcess, PROCESS_DUP_HANDLE};
 
-use crate::ipc::cmd::{OverlayTextureEventParams, Dimensions};
+use crate::ipc::cmd::OverlayTextureEventParams;
 
 pub struct D3D11Overlay {
     keyed_mutex: Option<IDXGIKeyedMutex>,
@@ -83,12 +87,13 @@ impl D3D11Overlay {
         self.invalidate();
         // todo: rest of this.
 
-        let tex_2d : ID3D11Texture2D = if let Ok(resource) = unsafe { device.OpenSharedResource1(self.handle) } {
-            resource
-        } else {
-            eprintln!("unable to open shared resource {:?}", self.handle);
-            return false;
-        };
+        let tex_2d: ID3D11Texture2D =
+            if let Ok(resource) = unsafe { device.OpenSharedResource1(self.handle) } {
+                resource
+            } else {
+                eprintln!("unable to open shared resource {:?}", self.handle);
+                return false;
+            };
 
         let tex_mtx: IDXGIKeyedMutex = if let Ok(mtx) = unsafe { Interface::cast(&tex_2d) } {
             mtx
@@ -97,7 +102,7 @@ impl D3D11Overlay {
             return false;
         };
 
-        let tex_desc = unsafe  {
+        let tex_desc = unsafe {
             let mut tex_desc = MaybeUninit::uninit();
             tex_2d.GetDesc(tex_desc.as_mut_ptr());
             tex_desc.assume_init()
@@ -109,9 +114,9 @@ impl D3D11Overlay {
             Anonymous: D3D11_SHADER_RESOURCE_VIEW_DESC_0 {
                 Texture2D: D3D11_TEX2D_SRV {
                     MipLevels: tex_desc.MipLevels,
-                    MostDetailedMip: 0
-                }
-            }
+                    MostDetailedMip: 0,
+                },
+            },
         };
 
         let srv = if let Ok(srv) = unsafe { device.CreateShaderResourceView(&tex_2d, &srv_desc) } {
@@ -175,12 +180,11 @@ impl D3D11Overlay {
     }
 
     pub fn paint<F: Sized + FnOnce(usize, Dimensions)>(&self, f: F) {
-        // addref
         if let Some(srv_handle) = &self.shader_resource_view {
             unsafe {
-                f(std::mem::transmute_copy(&srv_handle), self.size);
+                let srv = srv_handle.clone();
+                f(std::mem::transmute(srv), self.size);
             }
-            // release
         }
     }
 }

@@ -1,6 +1,8 @@
 use std::fmt::{Debug, Formatter};
 use std::io::ErrorKind;
 use uuid::Uuid;
+use windows::Win32::Graphics::Direct3D11::D3D11_TEXTURE2D_DESC;
+use crate::common::Dimensions;
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 #[repr(transparent)]
@@ -116,32 +118,6 @@ impl Debug for GameWindowCommand {
     }
 }
 
-#[derive(PartialEq, Eq, Copy, Clone, Debug)]
-pub struct Dimensions {
-    width: u32,
-    height: u32,
-}
-
-impl Dimensions {
-    pub fn new(width: u32, height: u32) -> Dimensions {
-        Dimensions { width, height }
-    }
-}
-
-impl From<[f32; 2]> for Dimensions {
-    fn from(item: [f32; 2]) -> Self {
-        Dimensions {
-            width: item[0] as u32,
-            height: item[1] as u32
-        }
-    }
-}
-
-impl From<Dimensions> for [f32; 2] {
-    fn from(item: Dimensions) -> Self {
-        [item.width as f32, item.height as f32]
-    }
-}
 impl GameWindowCommand {
     pub const fn handshake(uuid: &Uuid) -> GameWindowCommand {
         GameWindowCommand {

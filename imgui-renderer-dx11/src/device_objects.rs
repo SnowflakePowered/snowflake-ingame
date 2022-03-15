@@ -47,8 +47,9 @@ impl FontTexture {
         unsafe {
             // todo: check if transmute is needed instead
             // This is incredibly unsafe.
+            let srv = self.font_resource_view.clone();
             TextureId::from(
-                std::mem::transmute_copy::<_, *const ()>(&self.font_resource_view) as usize,
+                std::mem::transmute::<_, *const ()>(srv) as usize,
             )
         }
     }
@@ -115,6 +116,7 @@ impl FontTexture {
         })
     }
 }
+
 impl RendererDeviceObjects {
     pub fn new(device: &ID3D11Device) -> HResult<RendererDeviceObjects> {
         let (vertex_shader, input_layout) = create_vertex_shader(device)?;
@@ -200,7 +202,7 @@ fn create_blend_state(device: &ID3D11Device) -> HResult<ID3D11BlendState> {
     };
 
     blend_desc.RenderTarget[0] = D3D11_RENDER_TARGET_BLEND_DESC {
-        BlendEnable: false.into(),
+        BlendEnable: true.into(),
         SrcBlend: D3D11_BLEND_SRC_ALPHA,
         DestBlend: D3D11_BLEND_INV_SRC_ALPHA,
         BlendOp: D3D11_BLEND_OP_ADD,

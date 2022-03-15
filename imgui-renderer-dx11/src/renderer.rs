@@ -1,7 +1,10 @@
+use std::ffi::OsString;
 use std::marker::PhantomData;
+use std::os::windows::ffi::OsStrExt;
+use std::str::FromStr;
 use imgui::internal::RawWrapper;
-use imgui::{DrawCmd, DrawData, DrawIdx, DrawVert, Textures};
-use windows::core::Result as HResult;
+use imgui::{DrawCmd, DrawData, DrawIdx, DrawVert};
+use windows::core::{HSTRING, Result as HResult};
 use windows::Win32::Foundation::RECT;
 use windows::Win32::Graphics::Direct3D::D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 use windows::Win32::Graphics::Direct3D11::{
@@ -9,6 +12,7 @@ use windows::Win32::Graphics::Direct3D11::{
     D3D11_VIEWPORT,
 };
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_R16_UINT, DXGI_FORMAT_R32_UINT};
+use windows::Win32::Graphics::Dxgi::DXGI_ERROR_DEVICE_RESET;
 
 use crate::backup::StateBackup;
 use crate::buffers::{IndexBuffer, VertexBuffer};
@@ -25,7 +29,6 @@ pub struct RenderToken<'a>(PhantomData<&'a ()>);
 pub struct Renderer {
     device: ID3D11Device,
     context: ID3D11DeviceContext,
-    textures: Textures<ID3D11ShaderResourceView>,
     device_objects: Option<RendererDeviceObjects>,
     font: Option<FontTexture>,
     vertex_buffer: VertexBuffer,
@@ -47,10 +50,17 @@ impl Renderer {
         unsafe { device.GetImmediateContext(&mut context) };
         let index_buffer = IndexBuffer::new(&device)?;
         let vertex_buffer = VertexBuffer::new(&device)?;
+        let context = if let Some(context) = context {
+            context
+        } else {
+            let error = OsString::from_str("Unable to get immediate context from device.")
+                .unwrap(); // infallible
+            let error: Vec<u16> = error.encode_wide().chain([0u16]).collect();
+            return Err(windows::core::Error::new(DXGI_ERROR_DEVICE_RESET, HSTRING::from_wide(&error)).into());
+        };
         let mut renderer = Renderer {
             device,
-            context: context.unwrap(), // todo: check unwrapped?
-            textures: Textures::new(),
+            context,
             device_objects: None,
             font: None,
             vertex_buffer,
@@ -101,10 +111,10 @@ impl Renderer {
         // Vertex and index buffers
         {
             // Does this unmap on failure?
-            let mut vtx_resource =
+            let vtx_resource =
                 self.context
                     .Map(self.vertex_buffer.buffer(), 0, D3D11_MAP_WRITE_DISCARD, 0)?;
-            let mut idx_resource =
+            let idx_resource =
                 self.context
                     .Map(self.index_buffer.buffer(), 0, D3D11_MAP_WRITE_DISCARD, 0)?;
 
@@ -252,8 +262,6 @@ impl Renderer {
 
                         // Apply scissor/clipping rectangle
                         self.context.RSSetScissorRects(&[rect]);
-
-
 
                         // srv will be dropped after rendering.
                         let texture_srv: ID3D11ShaderResourceView =

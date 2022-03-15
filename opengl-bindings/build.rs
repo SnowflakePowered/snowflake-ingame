@@ -1,4 +1,4 @@
-use gl_generator::{Api, Fallbacks, GlobalGenerator, Profile, Registry};
+use gl_generator::{Api, Fallbacks, StructGenerator, Profile, Registry};
 use std::env;
 use std::fs::File;
 use std::path::Path;
@@ -18,8 +18,10 @@ fn main() {
             "GL_EXT_memory_object_win32",
             "GL_EXT_semaphore_win32",
             "GL_EXT_win32_keyed_mutex",
+            "GL_EXT_memory_object_fd",
+            "GL_EXT_semaphore_fd",
         ],
     )
-    .write_bindings(GlobalGenerator, &mut file)
+    .write_bindings(StructGenerator, &mut file)
     .unwrap();
 }

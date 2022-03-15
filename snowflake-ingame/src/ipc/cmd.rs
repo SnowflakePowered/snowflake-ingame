@@ -1,7 +1,6 @@
 use std::fmt::{Debug, Formatter};
 use std::io::ErrorKind;
 use uuid::Uuid;
-use windows::Win32::Graphics::Direct3D11::D3D11_TEXTURE2D_DESC;
 use crate::common::Dimensions;
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]

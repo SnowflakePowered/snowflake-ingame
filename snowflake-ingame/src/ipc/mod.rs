@@ -2,7 +2,6 @@ pub mod cmd;
 
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use std::io::ErrorKind;
 use std::mem;
 use std::time::Duration;
 
@@ -12,7 +11,6 @@ use tokio::runtime::Runtime;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::{io, time};
 use uuid::Uuid;
-use uuid::Variant::Future;
 
 use crate::ipc::cmd::{GameWindowCommand, GameWindowCommandType};
 use crate::ipc::IpcConnectError::InvalidHandshake;
@@ -24,7 +22,7 @@ pub enum IpcConnectError {
 }
 
 impl Display for IpcConnectError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, _f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             IpcConnectError::InvalidHandshake => "Invalid handshake",
         };
@@ -63,25 +61,6 @@ pub struct IpcHandle {
     events: crossbeam_channel::Receiver<GameWindowCommand>,
 }
 
-async fn try_read_pipe(
-    pipe: &NamedPipeClient,
-    buf: &mut [u8],
-) -> Result<Option<GameWindowCommand>, Box<dyn Error + Send + Sync>> {
-    pipe.readable().await?;
-    match pipe.try_read(buf) {
-        Ok(0) => {
-            return Err(io::Error::new(
-                io::ErrorKind::BrokenPipe,
-                "Pipe closed when expected handshake",
-            )
-            .into())
-        }
-        Ok(n) => Ok(Some(buf.try_into()?)),
-        Err(e) if e.kind() == io::ErrorKind::WouldBlock => Ok(None),
-        Err(e) => return Err(e.into()),
-    }
-}
-
 pub struct IpcConnection {
     ctx: Runtime,
     pipe: NamedPipeClient,
@@ -89,11 +68,10 @@ pub struct IpcConnection {
     cmd_client_rx: crossbeam_channel::Receiver<GameWindowCommand>,
     cmd_rx: tokio::sync::mpsc::UnboundedReceiver<GameWindowCommand>,
     cmd_tx: crossbeam_channel::Sender<GameWindowCommand>,
-    uuid: Uuid,
 }
 
 impl IpcConnectionBuilder {
-    pub fn connect(mut self) -> Result<IpcConnection, Box<dyn Error>> {
+    pub fn connect(self) -> Result<IpcConnection, Box<dyn Error>> {
         let pipe = self.ctx.block_on(async {
             let pipeid = &self.uuid;
             let mut pipe = connect(pipeid).await?;
@@ -129,7 +107,6 @@ impl IpcConnectionBuilder {
             cmd_tx: tx,
             cmd_client_tx: client_tx,
             cmd_client_rx: client_rx,
-            uuid: self.uuid,
         })
     }
 
@@ -149,10 +126,10 @@ impl IpcConnection {
         }
     }
 
-    pub fn listen(mut self) -> Result<(), Box<dyn Error>> {
-        let mut client = self.pipe;
+    pub fn listen(self) -> Result<(), Box<dyn Error>> {
+        let client = self.pipe;
         let mut cmd_rx = self.cmd_rx;
-        let mut cmd_tx = self.cmd_tx;
+        let cmd_tx = self.cmd_tx;
         self.ctx
             .block_on(async move {
                 loop {
@@ -221,6 +198,7 @@ impl IpcHandle {
         self.sender.send(cmd)
     }
 
+    #[allow(dead_code)]
     pub fn recv(&self) -> Result<GameWindowCommand, crossbeam_channel::RecvError> {
         self.events.recv()
     }

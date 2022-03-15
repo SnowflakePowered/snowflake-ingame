@@ -18,8 +18,8 @@ use windows::Win32::Graphics::Dxgi::Common::{
     DXGI_FORMAT, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_MODE_DESC, DXGI_MODE_SCALING_UNSPECIFIED,
     DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED, DXGI_RATIONAL, DXGI_SAMPLE_DESC,
 };
+use crate::hook::HookHandle;
 
-use crate::{HookHandle, win32};
 use crate::hook_define;
 use crate::hook_impl_fn;
 use crate::hook_key;
@@ -32,7 +32,7 @@ struct VTables {
 }
 
 fn get_vtables() -> Result<VTables, Box<dyn Error>> {
-    let wnd = win32::window::TempWindow::new(b"snowflake_ingame_d3d\0");
+    let wnd = crate::win32::window::TempWindow::new(b"snowflake_ingame_d3d\0");
 
     let swapchain_desc = DXGI_SWAP_CHAIN_DESC {
         BufferDesc: DXGI_MODE_DESC {
@@ -102,7 +102,7 @@ static_detour! {
     static RESIZE_BUFFERS_DETOUR: extern "system" fn(IDXGISwapChain, u32, u32, u32, DXGI_FORMAT, u32) -> windows::core::HRESULT;
 }
 
-pub struct Direct3D11HookHandle {
+struct Direct3D11HookHandle {
     present_handle: usize,
     resize_buffers_handle: usize,
 }
@@ -152,7 +152,7 @@ impl Direct3D11HookContext {
         &self,
         present: FnPresentHook,
         resize_buffers: FnResizeBuffersHook,
-    ) -> Result<Direct3D11HookHandle, Box<dyn Error>> {
+    ) -> Result<impl HookHandle, Box<dyn Error>> {
         let present_key = hook_key!(box present);
         let resize_key = hook_key!(box resize_buffers);
         PRESENT_CHAIN.write()?.insert(present_key, present);

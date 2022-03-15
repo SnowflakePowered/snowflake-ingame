@@ -14,16 +14,16 @@ use windows::Win32::Graphics::Direct3D11::{
 use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT;
 
 pub struct StateBackup<'ctx> {
-    context: &'ctx ID3D11DeviceContext,
-    ia: IABackup<'ctx>,
-    rs: RSBackup<'ctx>,
-    om: OMBackup<'ctx>,
-    vs: VSBackup<'ctx>,
-    hs: HSBackup<'ctx>,
-    ds: DSBackup<'ctx>,
-    gs: GSBackup<'ctx>,
-    ps: PSBackup<'ctx>,
-    cs: CSBackup<'ctx>,
+    _context: &'ctx ID3D11DeviceContext,
+    _ia: IABackup<'ctx>,
+    _rs: RSBackup<'ctx>,
+    _om: OMBackup<'ctx>,
+    _vs: VSBackup<'ctx>,
+    _hs: HSBackup<'ctx>,
+    _ds: DSBackup<'ctx>,
+    _gs: GSBackup<'ctx>,
+    _ps: PSBackup<'ctx>,
+    _cs: CSBackup<'ctx>,
 }
 
 #[derive(Default)]
@@ -66,16 +66,16 @@ impl Default for OMBackup<'_> {
 impl StateBackup<'_> {
     pub unsafe fn new(context: &ID3D11DeviceContext) -> StateBackup {
         StateBackup {
-            context,
-            ia: IABackup::backup(&context),
-            rs: RSBackup::backup(&context),
-            om: OMBackup::backup(&context),
-            vs: VSBackup::backup(&context),
-            hs: HSBackup::backup(&context),
-            ds: DSBackup::backup(&context),
-            gs: GSBackup::backup(&context),
-            ps: PSBackup::backup(&context),
-            cs: CSBackup::backup(&context),
+            _context: context,
+            _ia: IABackup::backup(&context),
+            _rs: RSBackup::backup(&context),
+            _om: OMBackup::backup(&context),
+            _vs: VSBackup::backup(&context),
+            _hs: HSBackup::backup(&context),
+            _ds: DSBackup::backup(&context),
+            _gs: GSBackup::backup(&context),
+            _ps: PSBackup::backup(&context),
+            _cs: CSBackup::backup(&context),
         }
     }
 }
@@ -166,21 +166,19 @@ impl<'ctx> OMBackup<'ctx> {
     unsafe fn backup(context: &'ctx ID3D11DeviceContext) -> Self {
         let mut backup: Self = Default::default();
         backup._parent = Some(context);
-        unsafe {
-            context.OMGetBlendState(
-                &mut backup.blend_state.0,
-                &mut backup.blend_state.1,
-                &mut backup.blend_state.2,
-            );
-            context
-                .OMGetDepthStencilState(&mut backup.depth_stencil.0, &mut backup.depth_stencil.1);
-            context.OMGetRenderTargetsAndUnorderedAccessViews(
-                &mut backup.render_target_views,
-                &mut backup.depth_stencil_view,
-                0,
-                &mut backup.unordered_access_views,
-            )
-        }
+        context.OMGetBlendState(
+            &mut backup.blend_state.0,
+            &mut backup.blend_state.1,
+            &mut backup.blend_state.2,
+        );
+        context
+            .OMGetDepthStencilState(&mut backup.depth_stencil.0, &mut backup.depth_stencil.1);
+        context.OMGetRenderTargetsAndUnorderedAccessViews(
+            &mut backup.render_target_views,
+            &mut backup.depth_stencil_view,
+            0,
+            &mut backup.unordered_access_views,
+        );
 
         backup
     }

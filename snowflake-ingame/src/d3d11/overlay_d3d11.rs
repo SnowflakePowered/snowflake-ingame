@@ -16,7 +16,7 @@ use imgui_renderer_dx11::ImguiTexture;
 
 use crate::ipc::cmd::OverlayTextureEventParams;
 
-pub struct D3D11Overlay {
+pub(in crate::d3d11) struct Direct3D11Overlay {
     keyed_mutex: Option<IDXGIKeyedMutex>,
     shader_resource_view: Option<ID3D11ShaderResourceView>,
     texture: Option<ID3D11Texture2D>,
@@ -27,16 +27,16 @@ pub struct D3D11Overlay {
 }
 
 /* this is hilariously unsafe and probably unsound */
-unsafe impl Send for D3D11Overlay {}
-unsafe impl Sync for D3D11Overlay {}
+unsafe impl Send for Direct3D11Overlay {}
+unsafe impl Sync for Direct3D11Overlay {}
 
-impl D3D11Overlay {
+impl Direct3D11Overlay {
     pub fn ready_to_initialize(&self) -> bool {
         self.handle != HANDLE(0)
     }
 
-    pub fn new() -> D3D11Overlay {
-        D3D11Overlay {
+    pub fn new() -> Direct3D11Overlay {
+        Direct3D11Overlay {
             keyed_mutex: None,
             shader_resource_view: None,
             texture: None,
@@ -89,7 +89,7 @@ impl D3D11Overlay {
                 return false;
             };
 
-        let tex_mtx: IDXGIKeyedMutex = if let Ok(mtx) = unsafe { Interface::cast(&tex_2d) } {
+        let tex_mtx: IDXGIKeyedMutex = if let Ok(mtx) = Interface::cast(&tex_2d) {
             mtx
         } else {
             eprintln!("[dx11] unable to open keyed mutex");

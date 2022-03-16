@@ -1,6 +1,5 @@
 use std::error::Error;
 use std::mem::ManuallyDrop;
-use std::pin::Pin;
 use std::sync::Arc;
 use parking_lot::{RwLock, RwLockWriteGuard};
 use windows::Win32::Graphics::Direct3D11::{

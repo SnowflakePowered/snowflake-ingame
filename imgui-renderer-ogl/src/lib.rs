@@ -14,3 +14,6 @@ impl ImguiTexture for GLuint {
         TextureId::new(*self as usize)
     }
 }
+
+pub use renderer::Renderer as OpenGLImguiRenderer;
+pub use renderer::RenderToken;

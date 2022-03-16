@@ -1,11 +1,14 @@
 use std::error::Error;
 use std::ffi::{c_void, CString};
 use std::mem::ManuallyDrop;
+use std::sync::Arc;
+use parking_lot::RwLock;
 use windows::core::{HRESULT, HSTRING, PCSTR};
 use windows::Win32::Foundation::GetLastError;
 use windows::Win32::Graphics::Gdi::HDC;
 use windows::Win32::Graphics::OpenGL::wglGetProcAddress;
 use windows::Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress};
+use imgui_renderer_ogl::OpenGLImguiRenderer;
 use opengl_bindings::Gl;
 use crate::hook::{HookHandle, HookChain};
 use crate::ipc::IpcHandle;
@@ -38,15 +41,20 @@ pub struct WGLKernel {
     gl: Gl,
     hook: WGLHookContext,
     ipc: IpcHandle,
-
+    overlay: Arc<RwLock<OpenGLImguiRenderer>>
 }
 
 impl WGLKernel {
     pub fn new(ipc: IpcHandle) -> Result<Self, Box<dyn Error>> {
         let gl_gpa = unsafe { create_wgl_loader()? };
+        let swap_buffers = unsafe { std::mem::transmute(gl_gpa("wglSwapBuffers")) };
+        let gl = Gl::load_with(gl_gpa);
+        let mut ctx = imgui::Context::create();
+        let overlay = Arc::new(RwLock::new(OpenGLImguiRenderer::new(&gl, &mut ctx)?));
         Ok(WGLKernel {
-            hook: WGLHookContext::init(unsafe { std::mem::transmute(gl_gpa("wglSwapBuffers")) })?,
-            gl: Gl::load_with(gl_gpa),
+            hook: WGLHookContext::init(swap_buffers)?,
+            gl,
+            overlay,
             ipc
         })
     }

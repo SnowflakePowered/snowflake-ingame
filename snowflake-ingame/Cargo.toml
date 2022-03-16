@@ -38,6 +38,9 @@ features = [
 [target.'cfg(target_os = "windows")'.dependencies.imgui-renderer-dx11]
 path = "../imgui-renderer-dx11"
 
+[dependencies.imgui-renderer-ogl]
+path = "../imgui-renderer-ogl"
+
 [dependencies]
 detour = { version = "0.8.1", features = ["nightly"] }
 indexmap = "1.8"

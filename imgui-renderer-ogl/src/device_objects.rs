@@ -1,9 +1,13 @@
-use std::os::raw::c_void;
-use imgui::TextureId;
-use opengl_bindings::{ARRAY_BUFFER, ARRAY_BUFFER_BINDING, COMPILE_STATUS, FRAGMENT_SHADER, Gl, INFO_LOG_LENGTH, LINEAR, LINK_STATUS, RGBA, TEXTURE_2D, TEXTURE_BINDING_2D, TEXTURE_MAG_FILTER, TEXTURE_MIN_FILTER, UNPACK_ROW_LENGTH, UNSIGNED_BYTE, VERTEX_ARRAY_BINDING, VERTEX_SHADER};
-use opengl_bindings::types::{GLchar, GLenum, GLint, GLsizei, GLuint};
 use crate::renderer::GlVersion;
 use crate::ImguiTexture;
+use imgui::TextureId;
+use opengl_bindings::types::{GLchar, GLenum, GLint, GLsizei, GLuint};
+use opengl_bindings::{
+    Gl, ARRAY_BUFFER, ARRAY_BUFFER_BINDING, COMPILE_STATUS, FRAGMENT_SHADER, INFO_LOG_LENGTH,
+    LINEAR, LINK_STATUS, RGBA, TEXTURE_2D, TEXTURE_BINDING_2D, TEXTURE_MAG_FILTER,
+    TEXTURE_MIN_FILTER, UNPACK_ROW_LENGTH, UNSIGNED_BYTE, VERTEX_ARRAY_BINDING, VERTEX_SHADER,
+};
+use std::os::raw::c_void;
 
 const FRAGMENT_120: &'static [u8] = include_bytes!("shaders/fragment_shader.120.glsl");
 const FRAGMENT_130: &'static [u8] = include_bytes!("shaders/fragment_shader.130.glsl");
@@ -19,23 +23,25 @@ pub enum ShaderError {
     CompileError(GLenum, &'static str),
 
     #[error("Failed to link shader")]
-    LinkError
+    LinkError,
 }
 
 struct Shader {
     source: &'static [u8],
     version: &'static [u8],
-    ty: GLenum
+    ty: GLenum,
 }
 
 struct CompiledShader<'a> {
     gl: &'a Gl,
-    shader: GLuint
+    shader: GLuint,
 }
 
 impl Drop for CompiledShader<'_> {
     fn drop(&mut self) {
-        unsafe { self.gl.DeleteShader(self.shader); }
+        unsafe {
+            self.gl.DeleteShader(self.shader);
+        }
     }
 }
 
@@ -54,7 +60,10 @@ impl Shader {
             GlVersion(410) => b"#version 410 core\n",
             GlVersion(420) => b"#version 410 core\n",
             GlVersion(430..=499) => b"#version 430 core\n",
-            _ => b"#version 130\n" // default to 130
+            #[cfg(target_os = "macos")]
+            _ => b"#version 150\n", // default to 150 on apple
+
+            _ => b"#version 130\n", // default to 130
         }
     }
 
@@ -81,8 +90,8 @@ impl Shader {
     pub const fn fragment_shader(version: GlVersion) -> Shader {
         Shader {
             version: Shader::glsl_version(version),
-            source: Shader::glsl_vertex(version),
-            ty: FRAGMENT_SHADER
+            source: Shader::glsl_fragment(version),
+            ty: FRAGMENT_SHADER,
         }
     }
 
@@ -90,7 +99,7 @@ impl Shader {
         Shader {
             version: Shader::glsl_version(version),
             source: Shader::glsl_vertex(version),
-            ty: VERTEX_SHADER
+            ty: VERTEX_SHADER,
         }
     }
 
@@ -102,39 +111,39 @@ impl Shader {
             gl.GetShaderiv(handle, COMPILE_STATUS, &mut status);
             gl.GetShaderiv(handle, INFO_LOG_LENGTH, &mut log_length);
             if status == opengl_bindings::FALSE as GLint {
-                return Err(ShaderError::CompileError(self.ty, version))
+                return Err(ShaderError::CompileError(self.ty, version));
             }
         }
         Ok(())
     }
 
     pub fn compile(self, gl: &Gl) -> Result<CompiledShader, ShaderError> {
-        let source = [self.version.as_ptr() as *const GLchar, self.source.as_ptr() as *const GLchar];
+        let source = [
+            self.version.as_ptr() as *const GLchar,
+            self.source.as_ptr() as *const GLchar,
+        ];
         let lengths = [self.version.len() as GLint, self.source.len() as GLint];
         unsafe {
             let handle = gl.CreateShader(self.ty);
             gl.ShaderSource(handle, 2, source.as_ptr(), lengths.as_ptr());
             gl.CompileShader(handle);
             self.check_shader(gl, handle)?;
-            Ok(CompiledShader {
-                gl,
-                shader: handle
-            })
+            Ok(CompiledShader { gl, shader: handle })
         }
     }
 }
 
-struct Program<'gl> {
-    handle: GLuint,
-    attrib_loc_tex: GLint,
-    attrib_loc_proj_mtx: GLint,
-    attrib_loc_vtx_pos: GLuint,
-    attrib_loc_vtx_uv: GLuint,
-    attrib_loc_vtx_color: GLuint,
-    gl: &'gl Gl
+pub(crate) struct Program<'gl> {
+    pub handle: GLuint,
+    pub attrib_loc_tex: GLint,
+    pub attrib_loc_proj_mtx: GLint,
+    pub attrib_loc_vtx_pos: GLuint,
+    pub attrib_loc_vtx_uv: GLuint,
+    pub attrib_loc_vtx_color: GLuint,
+    gl: &'gl Gl,
 }
 
-impl <'gl> Program<'gl> {
+impl<'gl> Program<'gl> {
     fn check_shader(gl: &Gl, handle: GLuint) -> Result<(), ShaderError> {
         let mut status = 0;
         let mut log_length = 0;
@@ -142,7 +151,7 @@ impl <'gl> Program<'gl> {
             gl.GetShaderiv(handle, LINK_STATUS, &mut status);
             gl.GetShaderiv(handle, INFO_LOG_LENGTH, &mut log_length);
             if status == opengl_bindings::FALSE as GLint {
-                return Err(ShaderError::LinkError)
+                return Err(ShaderError::LinkError);
             }
         }
         Ok(())
@@ -165,9 +174,11 @@ impl <'gl> Program<'gl> {
 
             let attrib_loc_tex = gl.GetUniformLocation(handle, b"Texture\0".as_ptr() as _);
             let attrib_loc_proj_mtx = gl.GetUniformLocation(handle, b"ProjMtx\0".as_ptr() as _);
-            let attrib_loc_vtx_pos = gl.GetAttribLocation(handle, b"Position\0".as_ptr() as _) as GLuint;
+            let attrib_loc_vtx_pos =
+                gl.GetAttribLocation(handle, b"Position\0".as_ptr() as _) as GLuint;
             let attrib_loc_vtx_uv = gl.GetAttribLocation(handle, b"UV\0".as_ptr() as _) as GLuint;
-            let attrib_loc_vtx_color = gl.GetAttribLocation(handle, b"Color\0".as_ptr() as _) as GLuint;
+            let attrib_loc_vtx_color =
+                gl.GetAttribLocation(handle, b"Color\0".as_ptr() as _) as GLuint;
 
             Ok(Program {
                 handle,
@@ -176,7 +187,7 @@ impl <'gl> Program<'gl> {
                 attrib_loc_vtx_pos,
                 attrib_loc_vtx_uv,
                 attrib_loc_vtx_color,
-                gl
+                gl,
             })
         }
     }
@@ -191,16 +202,16 @@ impl Drop for Program<'_> {
 }
 
 pub(crate) struct RendererDeviceObjects<'gl> {
-    shader: Program<'gl>,
-    vbo: GLuint,
-    elements: GLuint,
-    gl: &'gl Gl
+    pub shader: Program<'gl>,
+    pub vertex_buffer_obj: GLuint,
+    pub elements_buffer_obj: GLuint,
+    gl: &'gl Gl,
 }
 
-impl <'gl> RendererDeviceObjects<'gl> {
+impl<'gl> RendererDeviceObjects<'gl> {
     pub fn new(gl: &'gl Gl, version: GlVersion) -> Result<RendererDeviceObjects<'gl>, ShaderError> {
         // backup state
-        let mut last_texture= 0;
+        let mut last_texture = 0;
         let mut last_array_buffer = 0;
         let mut last_vertex_array = 0;
 
@@ -230,8 +241,8 @@ impl <'gl> RendererDeviceObjects<'gl> {
         Ok(RendererDeviceObjects {
             gl,
             shader,
-            vbo,
-            elements
+            vertex_buffer_obj: vbo,
+            elements_buffer_obj: elements,
         })
     }
 }
@@ -239,19 +250,19 @@ impl <'gl> RendererDeviceObjects<'gl> {
 impl Drop for RendererDeviceObjects<'_> {
     fn drop(&mut self) {
         unsafe {
-            self.gl.DeleteBuffers(1, &self.vbo);
-            self.gl.DeleteBuffers(1, &self.elements)
+            self.gl.DeleteBuffers(1, &self.vertex_buffer_obj);
+            self.gl.DeleteBuffers(1, &self.elements_buffer_obj)
         }
     }
 }
 
 pub struct FontTexture<'gl> {
     handle: GLuint,
-    gl: &'gl Gl
+    gl: &'gl Gl,
 }
 
-impl <'gl> FontTexture<'gl> {
-    pub fn new(fonts: &mut imgui::FontAtlasRefMut<'_>, gl: &'gl Gl) -> FontTexture<'gl>{
+impl<'gl> FontTexture<'gl> {
+    pub fn new(fonts: &mut imgui::FontAtlasRefMut<'_>, gl: &'gl Gl) -> FontTexture<'gl> {
         let mut last_texture = 0;
         let mut font_texture = 0;
         let font_tex_data = fonts.build_rgba32_texture();
@@ -266,15 +277,24 @@ impl <'gl> FontTexture<'gl> {
             gl.TexParameteri(TEXTURE_2D, TEXTURE_MIN_FILTER, LINEAR as GLint);
             gl.TexParameteri(TEXTURE_2D, TEXTURE_MAG_FILTER, LINEAR as GLint);
             gl.PixelStorei(UNPACK_ROW_LENGTH, 0);
-            gl.TexImage2D(TEXTURE_2D, 0, RGBA as GLint, font_tex_data.width as GLsizei,
-                          font_tex_data.height as GLsizei, 0, RGBA, UNSIGNED_BYTE, font_tex_data.data.as_ptr() as *const c_void);
+            gl.TexImage2D(
+                TEXTURE_2D,
+                0,
+                RGBA as GLint,
+                font_tex_data.width as GLsizei,
+                font_tex_data.height as GLsizei,
+                0,
+                RGBA,
+                UNSIGNED_BYTE,
+                font_tex_data.data.as_ptr() as *const c_void,
+            );
 
             gl.BindTexture(TEXTURE_2D, last_texture as GLuint);
         }
 
         FontTexture {
             handle: font_texture,
-            gl
+            gl,
         }
     }
 

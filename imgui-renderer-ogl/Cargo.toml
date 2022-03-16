@@ -10,3 +10,4 @@ opengl-bindings = { path = "../opengl-bindings" }
 imgui = "0.8.2"
 thiserror = "1"
 ouroboros = "0.14.2"
+field-offset = "0.3.4"

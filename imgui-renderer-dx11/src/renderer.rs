@@ -11,7 +11,7 @@ use windows::Win32::Graphics::Direct3D11::{
     ID3D11Device, ID3D11DeviceContext, ID3D11ShaderResourceView, D3D11_MAP_WRITE_DISCARD,
     D3D11_VIEWPORT,
 };
-use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_R16_UINT, DXGI_FORMAT_R32_UINT};
+use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT, DXGI_FORMAT_R16_UINT, DXGI_FORMAT_R32_UINT};
 use windows::Win32::Graphics::Dxgi::DXGI_ERROR_DEVICE_RESET;
 
 use crate::backup::StateBackup;
@@ -195,11 +195,7 @@ impl Renderer {
             );
             ctx.IASetIndexBuffer(
                 self.index_buffer.buffer(),
-                if std::mem::size_of::<DrawIdx>() == 2 {
-                    DXGI_FORMAT_R16_UINT
-                } else {
-                    DXGI_FORMAT_R32_UINT
-                },
+                IDX_FORMAT,
                 0,
             );
             ctx.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -240,13 +236,17 @@ impl Renderer {
                     DrawCmd::ResetRenderState => self.setup_render_state(draw_data),
                     DrawCmd::Elements { count, cmd_params } => {
                         // X Y Z W
+                        let [clip_x, clip_y, clip_z, clip_w] = cmd_params.clip_rect;
+                        let [off_x, off_y] = clip_off;
+                        let [scale_x, scale_y] = clip_scale;
+
                         let clip_min = (
-                            cmd_params.clip_rect[0] - clip_off[0],
-                            cmd_params.clip_rect[1] - clip_off[1],
+                            clip_x - off_x,
+                            clip_y - off_y,
                         );
                         let clip_max = (
-                            cmd_params.clip_rect[2] - clip_off[0],
-                            cmd_params.clip_rect[3] - clip_off[1],
+                            clip_z - off_x,
+                            clip_w - off_y,
                         );
 
                         if clip_max.0 <= clip_min.0 || clip_max.1 <= clip_min.1 {
@@ -254,10 +254,10 @@ impl Renderer {
                         }
 
                         let rect = RECT {
-                            left: (clip_min.0 * clip_scale[0]) as i32,
-                            top: (clip_min.1 * clip_scale[1]) as i32,
-                            right: (clip_max.0 * clip_scale[0]) as i32,
-                            bottom: (clip_max.1 * clip_scale[1]) as i32,
+                            left: (clip_min.0 * scale_x) as i32,
+                            top: (clip_min.1 * scale_y) as i32,
+                            right: (clip_max.0 * scale_x) as i32,
+                            bottom: (clip_max.1 * scale_y) as i32,
                         };
 
                         // Apply scissor/clipping rectangle
@@ -282,5 +282,14 @@ impl Renderer {
             vertex_offset += draw_list.vtx_buffer().len();
             index_offset += draw_list.idx_buffer().len();
         }
+    }
+}
+
+const IDX_FORMAT: DXGI_FORMAT = idx_format();
+const fn idx_format() -> DXGI_FORMAT {
+    if std::mem::size_of::<DrawIdx>() == 2 {
+        DXGI_FORMAT_R16_UINT
+    } else {
+        DXGI_FORMAT_R32_UINT
     }
 }

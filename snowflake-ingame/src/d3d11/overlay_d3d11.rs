@@ -26,9 +26,24 @@ pub(in crate::d3d11) struct Direct3D11Overlay {
     ready_to_paint: bool,
 }
 
-/* this is hilariously unsafe and probably unsound */
+// SAFETY: An instance of Direct3D11Overlay must only
+// ever be called  within IDXGISwapChain::Present or IDXGISwapChain::ResizeBuffers
 unsafe impl Send for Direct3D11Overlay {}
 unsafe impl Sync for Direct3D11Overlay {}
+
+pub(in crate::d3d11) struct KeyedMutexHandle(IDXGIKeyedMutex, u64);
+impl Drop for KeyedMutexHandle {
+    fn drop(&mut self) {
+        unsafe { self.0.ReleaseSync(self.1).unwrap_or(()); }
+    }
+}
+
+impl KeyedMutexHandle {
+    pub fn new(kmt: &IDXGIKeyedMutex, key: u64, ms: u32) -> Option<Self> {
+        let kmt = kmt.clone();
+        unsafe { kmt.AcquireSync(key, ms).map(|_| Some(KeyedMutexHandle(kmt, 0))).unwrap_or(None) }
+    }
+}
 
 impl Direct3D11Overlay {
     pub fn ready_to_initialize(&self) -> bool {
@@ -51,19 +66,11 @@ impl Direct3D11Overlay {
         return self.size == *size;
     }
 
-    pub fn acquire_sync(&self) -> bool {
+    pub fn acquire_sync(&self) -> Option<KeyedMutexHandle> {
         if let Some(kmt) = &self.keyed_mutex {
-            unsafe { kmt.AcquireSync(0, u32::MAX).map(|_| true).unwrap_or(false) }
+           KeyedMutexHandle::new(kmt, 0, u32::MAX)
         } else {
-            false
-        }
-    }
-
-    pub fn release_sync(&self) {
-        if let Some(kmt) = &self.keyed_mutex {
-            unsafe {
-                kmt.ReleaseSync(0).unwrap_or(());
-            }
+            None
         }
     }
 

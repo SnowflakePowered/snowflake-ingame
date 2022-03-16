@@ -1,8 +1,8 @@
 use std::error::Error;
 use std::mem::ManuallyDrop;
 use std::pin::Pin;
-use std::sync::{Arc, RwLock, RwLockWriteGuard};
-
+use std::sync::Arc;
+use parking_lot::{RwLock, RwLockWriteGuard};
 use windows::Win32::Graphics::Direct3D11::{
     D3D11_TEXTURE2D_DESC, ID3D11Device1, ID3D11Texture2D,
 };
@@ -20,11 +20,11 @@ use crate::ipc::IpcHandle;
 ///
 /// `overlay` and `imgui` should never be accessed outside of the Direct3D11 rendering thread.
 /// The mutexes to which should only ever be acquired inside an `FnPresentHook` or `FnResizeBuffersHook`,
-/// to ensure the soundness of the Send and Sync impls for
+/// to ensure the soundness of the Send and Sync impls for Direct3D11Overlay
 pub struct Direct3D11Kernel {
     hook: Direct3D11HookContext,
-    overlay: Pin<Arc<RwLock<Direct3D11Overlay>>>,
-    imgui: Pin<Arc<RwLock<Direct3D11ImguiController>>>,
+    overlay: Arc<RwLock<Direct3D11Overlay>>,
+    imgui: Arc<RwLock<Direct3D11ImguiController>>,
     ipc: IpcHandle,
 }
 
@@ -32,8 +32,8 @@ impl Direct3D11Kernel {
     pub fn new(ipc: IpcHandle) -> Result<Self, Box<dyn Error>> {
         Ok(Direct3D11Kernel {
             hook: Direct3D11HookContext::init()?,
-            overlay: Pin::new(Arc::new(RwLock::new(Direct3D11Overlay::new()))),
-            imgui: Pin::new(Arc::new(RwLock::new(Direct3D11ImguiController::new()))),
+            overlay: Arc::new(RwLock::new(Direct3D11Overlay::new())),
+            imgui: Arc::new(RwLock::new(Direct3D11ImguiController::new())),
             ipc,
         })
     }
@@ -90,15 +90,13 @@ impl Direct3D11Kernel {
         // imgui stuff here.
         // We don't need an external mutex here because the overlay will not change underneath us,
         // since overlay is updated within Present now.
-        if overlay.acquire_sync() {
+        if let Some(_kmt) = overlay.acquire_sync() {
             imgui.frame(&mut overlay, |ctx, render, overlay| {
                 let ui = ctx.frame();
                 overlay.paint(|tid, dim|  OverlayWindow::new(&ui, tid, dim));
                 ui.show_demo_window(&mut false);
                 render.render(ui.render()).unwrap()
             });
-
-            overlay.release_sync();
         }
 
         Ok::<_, Box<dyn Error>>(())
@@ -114,12 +112,8 @@ impl Direct3D11Kernel {
         let imgui = self.imgui.clone();
         Box::new(
             move |this: IDXGISwapChain, sync: u32, flags: u32, mut next| {
-                if let (Ok(overlay), Ok(imgui)) = (overlay.write(), imgui.write()) {
-                    let handle = handle.clone();
-                    Direct3D11Kernel::present_impl(handle, overlay, imgui, &this).unwrap_or(());
-                } else {
-                    eprintln!("[dx11] unable to acquire overlay write guards")
-                }
+                let handle = handle.clone();
+                Direct3D11Kernel::present_impl(handle, overlay.write(), imgui.write(), &this).unwrap_or(());
 
                 let fp = next.fp_next();
                 fp(this, sync, flags, next)
@@ -131,10 +125,7 @@ impl Direct3D11Kernel {
         let imgui = self.imgui.clone();
         Box::new(
             move |this: IDXGISwapChain, buf_cnt, width, height, format, flags, mut next| {
-                if let Ok(imgui) = imgui.write() {
-                    Direct3D11Kernel::resize_impl(imgui);
-                }
-
+                Direct3D11Kernel::resize_impl(imgui.write());
                 let fp = next.fp_next();
                 fp(this, buf_cnt, width, height, format, flags, next)
             },

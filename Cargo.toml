@@ -4,5 +4,6 @@ members = [
     "injector-example",
     "snowflake-ingame",
     "opengl-bindings",
-    "imgui-renderer-dx11"
+    "imgui-renderer-dx11",
+    "imgui-renderer-ogl"
 ]

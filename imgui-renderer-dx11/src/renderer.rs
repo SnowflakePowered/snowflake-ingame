@@ -1,10 +1,7 @@
-use std::ffi::OsString;
 use std::marker::PhantomData;
-use std::os::windows::ffi::OsStrExt;
-use std::str::FromStr;
 use imgui::internal::RawWrapper;
 use imgui::{DrawCmd, DrawData, DrawIdx, DrawVert};
-use windows::core::{HSTRING, Result as HResult};
+use windows::core::{Result as HResult};
 use windows::Win32::Foundation::RECT;
 use windows::Win32::Graphics::Direct3D::D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 use windows::Win32::Graphics::Direct3D11::{
@@ -12,11 +9,11 @@ use windows::Win32::Graphics::Direct3D11::{
     D3D11_VIEWPORT,
 };
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT, DXGI_FORMAT_R16_UINT, DXGI_FORMAT_R32_UINT};
-use windows::Win32::Graphics::Dxgi::DXGI_ERROR_DEVICE_RESET;
 
 use crate::backup::StateBackup;
 use crate::buffers::{IndexBuffer, VertexBuffer};
 use crate::device_objects::{FontTexture, RendererDeviceObjects};
+use crate::RenderError;
 
 #[repr(C)]
 pub(crate) struct VertexConstantBuffer {
@@ -44,7 +41,7 @@ impl Renderer {
         )));
     }
 
-    pub fn new(device: &ID3D11Device, imgui: &mut imgui::Context) -> HResult<Self> {
+    pub fn new(device: &ID3D11Device, imgui: &mut imgui::Context) ->  Result<Self, RenderError> {
         let device = device.clone();
         let mut context = None;
         unsafe { device.GetImmediateContext(&mut context) };
@@ -53,10 +50,7 @@ impl Renderer {
         let context = if let Some(context) = context {
             context
         } else {
-            let error = OsString::from_str("Unable to get immediate context from device.")
-                .unwrap(); // infallible
-            let error: Vec<u16> = error.encode_wide().chain([0u16]).collect();
-            return Err(windows::core::Error::new(DXGI_ERROR_DEVICE_RESET, HSTRING::from_wide(&error)).into());
+            return Err(RenderError::ContextInitError);
         };
         let mut renderer = Renderer {
             device,
@@ -71,7 +65,7 @@ impl Renderer {
         Ok(renderer)
     }
 
-    pub fn create_device_objects(&mut self, imgui: &mut imgui::Context) -> HResult<()> {
+    pub fn create_device_objects(&mut self, imgui: &mut imgui::Context) -> Result<(), RenderError> {
         let device_objects = RendererDeviceObjects::new(&self.device)?;
         let mut imgui_fonts = imgui.fonts();
         let fonts = FontTexture::new(&mut imgui_fonts, &self.device)?;
@@ -81,7 +75,7 @@ impl Renderer {
         Ok(())
     }
 
-    pub fn render<'a>(&mut self, draw_data: &DrawData) -> HResult<RenderToken<'a>> {
+    pub fn render<'a>(&mut self, draw_data: &DrawData) -> Result<RenderToken<'a>, RenderError> {
         // Avoid rendering when minimized
         if draw_data.display_size[0] <= 0.0
             || draw_data.display_size[1] <= 0.0

@@ -1,5 +1,5 @@
 use crate::renderer::GlVersion;
-use crate::ImguiTexture;
+use crate::{ImguiTexture, RenderError};
 use imgui::TextureId;
 use opengl_bindings::types::{GLchar, GLenum, GLint, GLsizei, GLuint};
 use opengl_bindings::{
@@ -16,15 +16,6 @@ const FRAGMENT_300: &'static [u8] = include_bytes!("shaders/fragment_shader.300.
 const VERTEX_120: &'static [u8] = include_bytes!("shaders/vertex_shader.120.glsl");
 const VERTEX_130: &'static [u8] = include_bytes!("shaders/vertex_shader.130.glsl");
 const VERTEX_300: &'static [u8] = include_bytes!("shaders/vertex_shader.300.glsl");
-
-#[derive(thiserror::Error, Debug)]
-pub enum ShaderError {
-    #[error("Failed to compile shader type {0:x} with GLSL {}")]
-    CompileError(GLenum, &'static str),
-
-    #[error("Failed to link shader")]
-    LinkError,
-}
 
 struct Shader {
     source: &'static [u8],
@@ -103,7 +94,7 @@ impl Shader {
         }
     }
 
-    fn check_shader(&self, gl: &Gl, handle: GLuint) -> Result<(), ShaderError> {
+    fn check_shader(&self, gl: &Gl, handle: GLuint) -> Result<(), RenderError> {
         let mut status = 0;
         let mut log_length = 0;
         unsafe {
@@ -111,13 +102,13 @@ impl Shader {
             gl.GetShaderiv(handle, COMPILE_STATUS, &mut status);
             gl.GetShaderiv(handle, INFO_LOG_LENGTH, &mut log_length);
             if status == opengl_bindings::FALSE as GLint {
-                return Err(ShaderError::CompileError(self.ty, version));
+                return Err(RenderError::CompileError(self.ty, version));
             }
         }
         Ok(())
     }
 
-    pub fn compile(self, gl: &Gl) -> Result<CompiledShader, ShaderError> {
+    pub fn compile(self, gl: &Gl) -> Result<CompiledShader, RenderError> {
         let source = [
             self.version.as_ptr() as *const GLchar,
             self.source.as_ptr() as *const GLchar,
@@ -144,20 +135,20 @@ pub(crate) struct Program<'gl> {
 }
 
 impl<'gl> Program<'gl> {
-    fn check_shader(gl: &Gl, handle: GLuint) -> Result<(), ShaderError> {
+    fn check_shader(gl: &Gl, handle: GLuint) -> Result<(), RenderError> {
         let mut status = 0;
         let mut log_length = 0;
         unsafe {
             gl.GetShaderiv(handle, LINK_STATUS, &mut status);
             gl.GetShaderiv(handle, INFO_LOG_LENGTH, &mut log_length);
             if status == opengl_bindings::FALSE as GLint {
-                return Err(ShaderError::LinkError);
+                return Err(RenderError::LinkError);
             }
         }
         Ok(())
     }
 
-    pub fn new(gl: &'gl Gl, version: GlVersion) -> Result<Program<'gl>, ShaderError> {
+    pub fn new(gl: &'gl Gl, version: GlVersion) -> Result<Program<'gl>, RenderError> {
         let vertex_shader = Shader::vertex_shader(version).compile(gl)?;
         let fragment_shader = Shader::fragment_shader(version).compile(gl)?;
 
@@ -209,7 +200,7 @@ pub(crate) struct RendererDeviceObjects<'gl> {
 }
 
 impl<'gl> RendererDeviceObjects<'gl> {
-    pub fn new(gl: &'gl Gl, version: GlVersion) -> Result<RendererDeviceObjects<'gl>, ShaderError> {
+    pub fn new(gl: &'gl Gl, version: GlVersion) -> Result<RendererDeviceObjects<'gl>, RenderError> {
         // backup state
         let mut last_texture = 0;
         let mut last_array_buffer = 0;

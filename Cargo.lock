@@ -263,6 +263,7 @@ version = "0.1.0"
 dependencies = [
  "imgui",
  "rand 0.8.5",
+ "thiserror",
  "windows",
 ]
 

@@ -4,7 +4,7 @@ use imgui::{Context, DrawData};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::Direct3D11::{ID3D11Device, ID3D11RenderTargetView, ID3D11Texture2D};
 use windows::Win32::Graphics::Dxgi::{DXGI_SWAP_CHAIN_DESC, IDXGISwapChain};
-use imgui_renderer_dx11::Direct3D11ImguiRenderer;
+use imgui_renderer_dx11::{Direct3D11ImguiRenderer, RenderError};
 use crate::common::Dimensions;
 use crate::d3d11::overlay_d3d11::Direct3D11Overlay;
 use windows::core::Result as HResult;
@@ -63,7 +63,7 @@ impl Direct3D11ImguiController {
         f(&mut self.imgui, renderer, overlay);
     }
 
-    unsafe fn init_renderer(&mut self, swapchain: &IDXGISwapChain, window: HWND) -> HResult<()> {
+    unsafe fn init_renderer(&mut self, swapchain: &IDXGISwapChain, window: HWND) -> Result<(), RenderError>{
         let device = swapchain.GetDevice()?;
         self.renderer = Some(Direct3D11ImguiRenderer::new(&device, &mut self.imgui)?);
         self.device = Some(device);

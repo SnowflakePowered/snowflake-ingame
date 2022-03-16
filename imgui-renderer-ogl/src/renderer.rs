@@ -17,13 +17,14 @@ use opengl_bindings::{
 };
 
 use crate::backup::StateBackup;
-use crate::device_objects::{FontTexture, RendererDeviceObjects, ShaderError};
+use crate::device_objects::{FontTexture, RendererDeviceObjects};
+use crate::RenderError;
 
 #[repr(transparent)]
 pub struct Renderer(RendererWrap);
 
 impl Renderer {
-    pub fn new(gl: &Gl, imgui: &mut imgui::Context) -> Result<Self, ShaderError> {
+    pub fn new(gl: &Gl, imgui: &mut imgui::Context) -> Result<Self, RenderError> {
         let gl = gl.clone();
 
         Ok(Renderer(RendererWrap::try_new(gl, |gl| {
@@ -31,7 +32,7 @@ impl Renderer {
         })?))
     }
 
-    pub fn create_device_objects(&mut self, imgui: &mut imgui::Context) -> Result<(), ShaderError> {
+    pub fn create_device_objects(&mut self, imgui: &mut imgui::Context) -> Result<(), RenderError> {
         self.0.with_renderer_mut(|r| r.create_device_objects(imgui))
     }
 
@@ -76,7 +77,7 @@ impl<'gl> RendererInner<'gl> {
         )));
     }
 
-    fn new(gl: &'gl Gl, imgui: &mut imgui::Context) -> Result<Self, ShaderError> {
+    fn new(gl: &'gl Gl, imgui: &mut imgui::Context) -> Result<Self, RenderError> {
         let version = unsafe {
             let mut maj_ver = 0;
             let mut min_ver = 0;
@@ -133,7 +134,7 @@ impl<'gl> RendererInner<'gl> {
         Ok(renderer)
     }
 
-    fn create_device_objects(&mut self, imgui: &mut imgui::Context) -> Result<(), ShaderError> {
+    fn create_device_objects(&mut self, imgui: &mut imgui::Context) -> Result<(), RenderError> {
         let device_objects = RendererDeviceObjects::new(&self.gl, self.version)?;
         let mut imgui_fonts = imgui.fonts();
         let fonts = FontTexture::new(&mut imgui_fonts, &self.gl);

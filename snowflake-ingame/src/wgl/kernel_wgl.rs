@@ -96,7 +96,8 @@ impl WGLKernel {
             match &cmd.ty {
                 &GameWindowCommandType::OVERLAY => {
                     eprintln!("[wgl] received overlay texture event");
-                    overlay.refresh( unsafe { cmd.params.overlay_event });
+                    overlay.refresh( unsafe { cmd.params.overlay_event })
+                        .unwrap_or_else(|e| eprintln!("[wgl] handle error: {}", e));
                 }
                 _ => {}
             }
@@ -119,13 +120,11 @@ impl WGLKernel {
             return Err(RenderError::OverlayHandleNotReady)
         }
 
-        if !overlay.prepare_paint(gl, window, hglrc) {
-            return Err(RenderError::OverlayPaintNotReady)
-        }
+        overlay.prepare_paint(gl, window, hglrc)
+            .map_err(|e| RenderError::OverlayPaintNotReady(Box::new(e)))?;
 
-        if !imgui.prepare_paint(gl, window, hglrc, size) {
-            return Err(RenderError::ImGuiNotReady)
-        }
+        imgui.prepare_paint(gl, window, hglrc, size)
+            .map_err(|e| RenderError::ImGuiNotReady(Box::new(e)))?;
 
         imgui.frame(&mut overlay, |ctx, render, overlay| {
             let ui = ctx.frame();

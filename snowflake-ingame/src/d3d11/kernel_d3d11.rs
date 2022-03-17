@@ -49,7 +49,8 @@ impl Direct3D11Kernel {
             match &cmd.ty {
                 &GameWindowCommandType::OVERLAY => {
                     eprintln!("[dx11] received overlay texture event");
-                    overlay.refresh( unsafe { cmd.params.overlay_event });
+                    overlay.refresh( unsafe { cmd.params.overlay_event })
+                        .unwrap_or_else(|e| eprintln!("[dx11] handle error: {}", e));
                 }
                 _ => {}
             }
@@ -76,13 +77,11 @@ impl Direct3D11Kernel {
 
         let device = unsafe { this.GetDevice::<ID3D11Device1>()? };
 
-        if !overlay.prepare_paint(device, swapchain_desc.OutputWindow) {
-            return Err(RenderError::OverlayPaintNotReady)
-        }
+        overlay.prepare_paint(device, swapchain_desc.OutputWindow)
+            .map_err(|e| RenderError::OverlayPaintNotReady(Box::new(e)))?;
 
-        if !imgui.prepare_paint(&this, size) {
-            return Err(RenderError::ImGuiNotReady)
-        }
+        imgui.prepare_paint(&this, size)
+            .map_err(|e| RenderError::ImGuiNotReady(Box::new(e)))?;
 
         // imgui stuff here.
         // We don't need an external mutex here because the overlay will not change underneath us,

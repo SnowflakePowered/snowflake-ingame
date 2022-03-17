@@ -1,18 +1,18 @@
 use imgui::TextureId;
 use windows::core::Interface;
-use windows::Win32::Foundation::{CloseHandle, HANDLE, HWND};
-use windows::Win32::Graphics::Direct3D::D3D11_SRV_DIMENSION_TEXTURE2D;
+use windows::Win32::Foundation::{HANDLE, HWND};
 use windows::Win32::Graphics::Direct3D11::{
-    ID3D11Device1, ID3D11ShaderResourceView, ID3D11Texture2D, D3D11_SHADER_RESOURCE_VIEW_DESC,
-    D3D11_SHADER_RESOURCE_VIEW_DESC_0, D3D11_TEX2D_SRV,
+    D3D11_SHADER_RESOURCE_VIEW_DESC, D3D11_SHADER_RESOURCE_VIEW_DESC_0, D3D11_TEX2D_SRV, ID3D11Device1,
+    ID3D11ShaderResourceView, ID3D11Texture2D,
 };
+use windows::Win32::Graphics::Direct3D::D3D11_SRV_DIMENSION_TEXTURE2D;
 use windows::Win32::Graphics::Dxgi::IDXGIKeyedMutex;
 
 use imgui_renderer_dx11::ImguiTexture;
 
-use crate::common::Dimensions;
+use crate::common::{Dimensions, RenderError};
 use crate::ipc::cmd::OverlayTextureEventParams;
-use crate::win32::handle::duplicate_handle;
+use crate::win32::handle::{HandleError, try_close_handle, try_duplicate_handle};
 
 pub(in crate::d3d11) struct Direct3D11Overlay {
     keyed_mutex: Option<IDXGIKeyedMutex>,
@@ -89,28 +89,19 @@ impl Direct3D11Overlay {
         self.keyed_mutex = None;
     }
 
-    // todo: make this err type
-    pub fn prepare_paint(&mut self, device: ID3D11Device1, output_window: HWND) -> bool {
+    #[must_use]
+    pub fn prepare_paint(&mut self, device: ID3D11Device1, output_window: HWND) -> Result<(), RenderError> {
         if self.ready_to_paint() && self.window == output_window {
-            return true;
+            return Ok(());
         }
 
         self.invalidate();
 
-        let tex_2d: ID3D11Texture2D =
-            if let Ok(resource) = unsafe { device.OpenSharedResource1(self.handle) } {
-                resource
-            } else {
-                eprintln!("[dx11] unable to open shared resource {:x?}", self.handle);
-                return false;
-            };
+        let tex_2d: ID3D11Texture2D = unsafe { device.OpenSharedResource1(self.handle) }
+            .map_err(|e| RenderError::OverlayHandleError(self.handle, e))?;
 
-        let tex_mtx: IDXGIKeyedMutex = if let Ok(mtx) = Interface::cast(&tex_2d) {
-            mtx
-        } else {
-            eprintln!("[dx11] unable to open keyed mutex");
-            return false;
-        };
+
+        let tex_mtx: IDXGIKeyedMutex = Interface::cast(&tex_2d)?;
 
         let mut tex_desc = Default::default();
         unsafe {
@@ -128,12 +119,7 @@ impl Direct3D11Overlay {
             },
         };
 
-        let srv = if let Ok(srv) = unsafe { device.CreateShaderResourceView(&tex_2d, &srv_desc) } {
-            srv
-        } else {
-            eprintln!("[dx11] unable to create srv");
-            return false;
-        };
+        let srv = unsafe { device.CreateShaderResourceView(&tex_2d, &srv_desc)? };
 
         self.keyed_mutex = Some(tex_mtx);
         self.texture = Some(tex_2d);
@@ -143,34 +129,28 @@ impl Direct3D11Overlay {
         self.window = output_window;
 
         eprintln!("[dx11] success on overlay");
-        true
+        Ok(())
     }
 
-    // todo: make this err type.
-    pub fn refresh(&mut self, params: OverlayTextureEventParams) -> bool {
+    #[must_use]
+    pub fn refresh(&mut self, params: OverlayTextureEventParams) -> Result<(), HandleError> {
         let owning_pid = params.source_pid;
         let handle = HANDLE(params.handle as isize);
 
-        self.handle = unsafe {
-            let duped_handle = match duplicate_handle(owning_pid as u32, handle) {
-                Ok(handle) => handle,
-                Err(e) => {
-                    eprintln!("[dx11] {:?}", e);
-                    return false;
-                }
-            };
+        self.handle = {
+            let duped_handle = try_duplicate_handle(owning_pid as u32, handle)?;
 
             // this doesn't do anything if its already null.
             self.invalidate();
 
-            if self.ready_to_initialize() && !(CloseHandle(self.handle).as_bool()) {
-                return false;
+            if self.ready_to_initialize() {
+                try_close_handle(self.handle)?;
             }
 
             eprintln!("[dx11] duped handle {:x?}", duped_handle);
             duped_handle
         };
-        true
+        Ok(())
     }
 
     pub fn paint<F: Sized + FnOnce(TextureId, Dimensions)>(&self, f: F) {

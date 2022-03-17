@@ -41,7 +41,7 @@ impl WGLImguiController {
         self.renderer.is_some()
     }
 
-    unsafe fn init_renderer(&mut self, gl: &Gl, window: HWND) -> Result<(), RenderError>{
+    unsafe fn init_renderer(&mut self, gl: &Gl, window: HWND) -> Result<(), RenderError> {
         // Renderer owns its device.
         self.renderer = Some(OpenGLImguiRenderer::new(&gl, &mut self.imgui)?);
         self.window = window;
@@ -52,7 +52,6 @@ impl WGLImguiController {
         self.renderer = None;
     }
 
-    // todo: use RenderToken POW
     pub fn frame<'a, F: FnOnce(&mut Context, Render, &mut WGLOverlay) -> Result<RenderToken, RenderError>>(
         &mut self,
         overlay: &mut WGLOverlay,
@@ -65,24 +64,22 @@ impl WGLImguiController {
         f(&mut self.imgui, renderer, overlay)
     }
 
-    pub fn prepare_paint(&mut self, gl: &Gl, window: HWND, ctx: HGLRC, screen_dim: Dimensions) -> bool {
+    #[must_use]
+    pub fn prepare_paint(&mut self, gl: &Gl, window: HWND, ctx: HGLRC, screen_dim: Dimensions) -> Result<(), RenderError> {
         if window != self.window || ctx != self.ctx {
             eprintln!("[wgl] render context changed");
             self.invalidate_renderer();
         }
 
         if !self.renderer_ready() {
-            if let Err(e) = unsafe { self.init_renderer(gl, window) } {
-                eprintln!("[wgl] unable to initialize renderer {:?}", e);
-                return false;
-            }
+            unsafe { self.init_renderer(gl, window)? };
         }
 
         // set screen size..
         self.imgui.io_mut().display_size = screen_dim.into();
         self.window = window;
         self.ctx = ctx;
-        true
+        Ok(())
     }
 }
 

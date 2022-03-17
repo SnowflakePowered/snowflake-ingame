@@ -1,5 +1,5 @@
 use imgui::TextureId;
-use windows::Win32::Foundation::{CloseHandle, HANDLE, HWND};
+use windows::Win32::Foundation::{HANDLE, HWND};
 use windows::Win32::Graphics::OpenGL::HGLRC;
 
 use imgui_renderer_ogl::ImguiTexture;
@@ -7,9 +7,9 @@ use opengl_bindings as gl;
 use opengl_bindings::Gl;
 use opengl_bindings::types::{GLint, GLsizei, GLuint};
 
-use crate::common::Dimensions;
+use crate::common::{Dimensions, RenderError};
 use crate::ipc::cmd::OverlayTextureEventParams;
-use crate::win32::handle::duplicate_handle;
+use crate::win32::handle::{HandleError, try_close_handle, try_duplicate_handle};
 
 pub(in crate::wgl) struct WGLOverlay {
     handle: HANDLE,
@@ -99,25 +99,19 @@ impl WGLOverlay {
         }
     }
 
-    pub fn refresh(&mut self, params: OverlayTextureEventParams) -> bool {
+    #[must_use]
+    pub fn refresh(&mut self, params: OverlayTextureEventParams) -> Result<(), HandleError> {
         let owning_pid = params.source_pid;
         let handle = HANDLE(params.handle as isize);
 
-        // todo: extract common code
-        self.handle = unsafe {
-            let duped_handle = match duplicate_handle(owning_pid as u32, handle) {
-                Ok(handle) => handle,
-                Err(e) => {
-                    eprintln!("[wgl] {:?}", e);
-                    return false;
-                }
-            };
+        self.handle = {
+            let duped_handle = try_duplicate_handle(owning_pid as u32, handle)?;
 
             // this doesn't do anything if its already null.
             self.invalidate();
 
-            if self.ready_to_initialize() && !(CloseHandle(self.handle).as_bool()) {
-                return false;
+            if self.ready_to_initialize() {
+                try_close_handle(self.handle)?;
             }
 
             eprintln!("[wgl] duped handle {:x?}", duped_handle);
@@ -130,12 +124,13 @@ impl WGLOverlay {
         };
 
         self.size = params.size;
-        true
+        Ok(())
     }
 
-    pub fn prepare_paint(&mut self, gl: &Gl, window: HWND, context: HGLRC) -> bool {
+    #[must_use]
+    pub fn prepare_paint(&mut self, gl: &Gl, window: HWND, context: HGLRC) -> Result<(), RenderError> {
         if self.ready_to_paint() && self.window == window && self.context == context {
-            return true;
+            return Ok(());
         }
 
         self.invalidate();
@@ -148,8 +143,7 @@ impl WGLOverlay {
             || !gl.ReleaseKeyedMutexWin32EXT.is_loaded()
             || !gl.TextureParameteri.is_loaded()
         {
-            eprintln!("[ogl] GL_EXT_memory_object_win32 not loaded or missing DSA.");
-            return false;
+            return Err(imgui_renderer_ogl::RenderError::MissingExtensionError("GL_EXT_memory_object_win32, GL_EXT_direct_state_access").into())
         }
 
         unsafe {
@@ -178,8 +172,7 @@ impl WGLOverlay {
             } else {
                 gl.DeleteTextures(1, &texture);
                 gl.DeleteMemoryObjectsEXT(1, &memory);
-                eprintln!("[wgl] Could not acquire keyed mutex on memory object");
-                return false;
+                return Err(RenderError::OverlayMutexNotReady)
             }
 
             self.texture = Some(GlSharedTexture {
@@ -188,7 +181,7 @@ impl WGLOverlay {
                 memory
             })
         }
-        true
+        Ok(())
     }
 
     pub fn paint<F: Sized + FnOnce(TextureId, Dimensions)>(&self, f: F) {

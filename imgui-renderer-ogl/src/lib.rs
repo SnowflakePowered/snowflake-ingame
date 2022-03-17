@@ -17,11 +17,14 @@ impl ImguiTexture for GLuint {
 
 #[derive(thiserror::Error, Debug)]
 pub enum RenderError {
-    #[error("Failed to compile shader type {0:x} with GLSL {}")]
+    #[error("Failed to compile shader type {0:x} with GLSL {1}")]
     CompileError(GLenum, &'static str),
 
     #[error("Failed to link shader")]
     LinkError,
+
+    #[error("Missing required extensions: {0}")]
+    MissingExtensionError(&'static str)
 }
 
 pub use renderer::Renderer as OpenGLImguiRenderer;

@@ -104,14 +104,9 @@ impl Direct3D11ImguiController {
         Ok(())
     }
 
-    pub fn prepare_paint(&mut self, swapchain: &IDXGISwapChain, screen_dim: Dimensions) -> bool {
-        let swap_desc: DXGI_SWAP_CHAIN_DESC = if let Ok(swap_desc) = unsafe { swapchain.GetDesc() }
-        {
-            swap_desc
-        } else {
-            eprintln!("[dx11] unable to get swapchain desc");
-            return false;
-        };
+    #[must_use]
+    pub fn prepare_paint(&mut self, swapchain: &IDXGISwapChain, screen_dim: Dimensions) -> Result<(), RenderError> {
+        let swap_desc: DXGI_SWAP_CHAIN_DESC = unsafe { swapchain.GetDesc()? };
 
         if swap_desc.OutputWindow != self.window {
             eprintln!("[dx11] render context changed");
@@ -120,23 +115,17 @@ impl Direct3D11ImguiController {
         }
 
         if !self.renderer_ready() {
-            if let Err(_) = unsafe { self.init_renderer(swapchain, swap_desc.OutputWindow) } {
-                eprintln!("[dx11] unable to initialize renderer");
-                return false;
-            }
+            unsafe { self.init_renderer(swapchain, swap_desc.OutputWindow)? };
         }
 
         if !self.rtv_ready() {
-            if let Err(_) = unsafe { self.init_rtv(&swapchain) } {
-                eprintln!("[dx11] unable to set render target view");
-                return false;
-            }
+            unsafe { self.init_rtv(&swapchain)? }
         }
 
         // set screen size..
         self.imgui.io_mut().display_size = screen_dim.into();
         self.window = swap_desc.OutputWindow;
-        true
+        Ok(())
     }
 }
 

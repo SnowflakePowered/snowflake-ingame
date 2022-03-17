@@ -1,4 +1,5 @@
 use imgui::{Condition, Image, StyleVar, TextureId, Ui, Window, WindowFlags};
+use windows::Win32::Foundation::HANDLE;
 use windows::Win32::Graphics::Direct3D11::D3D11_TEXTURE2D_DESC;
 use crate::ipc::cmd::GameWindowCommand;
 
@@ -77,15 +78,18 @@ pub enum RenderError {
     #[error("The requested renderer has not been initialized.")]
     RendererNotReady,
 
+    #[error("Error occurred when trying to open shared handle {0:x?} ({0:?}).")]
+    OverlayHandleError(HANDLE, windows::core::Error),
+
     #[error("The overlay texture handle has not been initialized.")]
     OverlayHandleNotReady,
 
-    #[error("The overlay could not be initialized.")]
-    OverlayPaintNotReady,
+    #[error("The overlay could not be initialized. {0}")]
+    OverlayPaintNotReady(Box<RenderError>),
 
     #[error("The overlay mutex could not be acquired.")]
     OverlayMutexNotReady,
 
-    #[error("The ImGui context could not be readied for paint.")]
-    ImGuiNotReady
+    #[error("The ImGui context could not be readied for paint. {0}")]
+    ImGuiNotReady(Box<RenderError>)
 }

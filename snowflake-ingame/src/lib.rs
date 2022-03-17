@@ -30,9 +30,9 @@ unsafe fn main() -> Result<(), Box<dyn Error>> {
 
     let handle = ipc.handle();
 
-    if let Some((_, kernel)) = env.find(|(key, val)| key == "SNOWFLAKE_GFX_KERNEL") {
+    if let Some((_, kernel)) = env.find(|(key, _val)| key == "SNOWFLAKE_GFX_KERNEL") {
         match kernel.as_str() {
-            "DIRECT3D11" => {
+            "D3D11" => {
                 let mut dx11 = Direct3D11Kernel::new(handle.clone())?;
                 dx11.init()?;
                 println!("[dx11] init finish");
@@ -42,13 +42,11 @@ unsafe fn main() -> Result<(), Box<dyn Error>> {
                 wgl.init()?;
                 println!("[wgl] init finish");
             }
-            _ => {}
+            _ => {
+                println!("[gfx] unknown graphics kernel")
+            }
         }
     }
-
-    let mut wgl = WGLKernel::new(handle.clone())?;
-    wgl.init()?;
-    println!("[wgl] init finish");
 
     ipc.listen()?;
     eprintln!("[ipc] ipc stop");

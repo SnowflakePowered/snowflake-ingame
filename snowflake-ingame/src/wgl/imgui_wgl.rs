@@ -4,6 +4,7 @@ use windows::Win32::Graphics::OpenGL::HGLRC;
 use imgui_renderer_ogl::{OpenGLImguiRenderer, RenderError};
 use opengl_bindings::Gl;
 use crate::common::Dimensions;
+use crate::wgl::overlay::WGLOverlay;
 
 pub (in crate::wgl) struct WGLImguiController {
     imgui: Context,
@@ -51,27 +52,27 @@ impl WGLImguiController {
     }
 
     // todo: use RenderToken POW
-    pub fn frame<'a, F: FnOnce(&mut Context, Render) -> ()>(
+    pub fn frame<'a, F: FnOnce(&mut Context, Render, &mut WGLOverlay) -> ()>(
         &mut self,
-        // overlay: &mut Direct3D11Overlay,
+        overlay: &mut WGLOverlay,
         f: F,
     ) {
         let renderer = Render {
             render: self.renderer.as_mut(),
         };
 
-        f(&mut self.imgui, renderer);
+        f(&mut self.imgui, renderer, overlay);
     }
-
 
     pub fn prepare_paint(&mut self, gl: &Gl, window: HWND, ctx: HGLRC, screen_dim: Dimensions) -> bool {
         if window != self.window || ctx != self.ctx {
+            eprintln!("[wgl] render context changed");
             self.invalidate_renderer();
         }
 
         if !self.renderer_ready() {
             if let Err(e) = unsafe { self.init_renderer(gl, window) } {
-                eprintln!("[ogl] unable to initialize renderer {:?}", e);
+                eprintln!("[wgl] unable to initialize renderer {:?}", e);
                 return false;
             }
         }

@@ -112,8 +112,9 @@ impl Direct3D11Kernel {
         Box::new(
             move |this: IDXGISwapChain, sync: u32, flags: u32, mut next| {
                 let handle = handle.clone();
-                Direct3D11Kernel::present_impl(handle, overlay.write(), imgui.write(), &this).unwrap_or(());
-
+                Direct3D11Kernel::present_impl(handle, overlay.write(),
+                                               imgui.write(), &this)
+                    .unwrap_or(());
                 let fp = next.fp_next();
                 fp(this, sync, flags, next)
             },

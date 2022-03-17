@@ -24,14 +24,27 @@ mod common;
 
 unsafe fn main() -> Result<(), Box<dyn Error>> {
 
+    let mut env = std::env::vars();
     let ipc = IpcConnectionBuilder::new(Uuid::nil());
     let ipc = ipc.connect()?;
 
     let handle = ipc.handle();
 
-    let mut dx11 = Direct3D11Kernel::new(handle.clone())?;
-    dx11.init()?;
-    println!("[dx11] init finish");
+    if let Some((_, kernel)) = env.find(|(key, val)| key == "SNOWFLAKE_GFX_KERNEL") {
+        match kernel.as_str() {
+            "DIRECT3D11" => {
+                let mut dx11 = Direct3D11Kernel::new(handle.clone())?;
+                dx11.init()?;
+                println!("[dx11] init finish");
+            }
+            "WGL" => {
+                let mut wgl = WGLKernel::new(handle.clone())?;
+                wgl.init()?;
+                println!("[wgl] init finish");
+            }
+            _ => {}
+        }
+    }
 
     let mut wgl = WGLKernel::new(handle.clone())?;
     wgl.init()?;

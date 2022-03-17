@@ -135,12 +135,12 @@ pub(crate) struct Program<'gl> {
 }
 
 impl<'gl> Program<'gl> {
-    fn check_shader(gl: &Gl, handle: GLuint) -> Result<(), RenderError> {
+    fn check_program(gl: &Gl, handle: GLuint) -> Result<(), RenderError> {
         let mut status = 0;
         let mut log_length = 0;
         unsafe {
-            gl.GetShaderiv(handle, LINK_STATUS, &mut status);
-            gl.GetShaderiv(handle, INFO_LOG_LENGTH, &mut log_length);
+            gl.GetProgramiv(handle, LINK_STATUS, &mut status);
+            gl.GetProgramiv(handle, INFO_LOG_LENGTH, &mut log_length);
             if status == opengl_bindings::FALSE as GLint {
                 return Err(RenderError::LinkError);
             }
@@ -158,7 +158,7 @@ impl<'gl> Program<'gl> {
             gl.AttachShader(handle, fragment_shader.shader);
             gl.LinkProgram(handle);
 
-            Program::check_shader(gl, handle)?;
+            Program::check_program(gl, handle)?;
 
             gl.DetachShader(handle, vertex_shader.shader);
             gl.DetachShader(handle, fragment_shader.shader);

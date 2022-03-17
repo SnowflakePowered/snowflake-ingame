@@ -14,7 +14,7 @@ pub(in crate::d3d11) struct Render<'a> {
 }
 
 impl Render<'_> {
-    pub fn render(self, draw_data: &DrawData) -> HResult<()> {
+    pub fn render(self, draw_data: &DrawData) -> Result<(), RenderError> {
         if let Some(renderer) = self.render {
             renderer.render(draw_data)?;
         }
@@ -22,11 +22,9 @@ impl Render<'_> {
     }
 }
 
-
 pub(in crate::d3d11) struct Direct3D11ImguiController {
     imgui: Context,
     renderer: Option<Direct3D11ImguiRenderer>,
-    device: Option<ID3D11Device>,
     window: HWND,
     rtv: Option<ID3D11RenderTargetView>,
 }
@@ -36,14 +34,13 @@ impl Direct3D11ImguiController {
         Direct3D11ImguiController {
             imgui: Context::create(),
             renderer: None,
-            device: None,
             window: HWND(0),
             rtv: None,
         }
     }
 
     pub const fn renderer_ready(&self) -> bool {
-        self.renderer.is_some() && self.device.is_some()
+        self.renderer.is_some()
     }
 
     pub const fn rtv_ready(&self) -> bool {
@@ -65,15 +62,14 @@ impl Direct3D11ImguiController {
 
     unsafe fn init_renderer(&mut self, swapchain: &IDXGISwapChain, window: HWND) -> Result<(), RenderError>{
         let device = swapchain.GetDevice()?;
+        // Renderer owns its device.
         self.renderer = Some(Direct3D11ImguiRenderer::new(&device, &mut self.imgui)?);
-        self.device = Some(device);
         self.window = window;
         Ok(())
     }
 
     pub fn invalidate_renderer(&mut self) {
         self.renderer = None;
-        self.device = None;
     }
 
     pub fn invalidate_rtv(&mut self) {

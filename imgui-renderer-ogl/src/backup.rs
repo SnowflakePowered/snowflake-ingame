@@ -22,8 +22,8 @@ pub struct StateBackup<'gl> {
     last_enable_stencil_test: GLboolean,
     last_enable_scissor_test: GLboolean,
     last_enable_primitive_restart: GLboolean,
-    pub last_blend_src_alpha: GLint,
-    pub last_blend_dst_alpha: GLint,
+    last_blend_src_alpha: GLint,
+    last_blend_dst_alpha: GLint,
 }
 
 macro_rules! backup_gl_int_state {

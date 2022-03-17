@@ -1,5 +1,6 @@
 use imgui::{Condition, Image, StyleVar, TextureId, Ui, Window, WindowFlags};
 use windows::Win32::Graphics::Direct3D11::D3D11_TEXTURE2D_DESC;
+use crate::ipc::cmd::GameWindowCommand;
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub struct Dimensions {
@@ -57,4 +58,34 @@ impl OverlayWindow {
                 Image::new(tid, dim.into()).build(ui)
             }).unwrap_or(())
     }
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum RenderError {
+    #[error("A IPC error has occured ({0:?}).")]
+    IpcError(#[from] tokio::sync::mpsc::error::SendError<GameWindowCommand>),
+
+    #[error("A internal OpenGL error occurred ({0:?}).")]
+    OpenGLInternalError(#[from] imgui_renderer_ogl::RenderError),
+
+    #[error("A internal Direct3D11 error occurred ({0:?}).")]
+    Direct3D11InternalError(#[from] imgui_renderer_dx11::RenderError),
+
+    #[error("A internal DXGI error occurred ({0:?}).")]
+    DXGIInternalError(#[from] windows::core::Error),
+
+    #[error("The requested renderer has not been initialized.")]
+    RendererNotReady,
+
+    #[error("The overlay texture handle has not been initialized.")]
+    OverlayHandleNotReady,
+
+    #[error("The overlay could not be initialized.")]
+    OverlayPaintNotReady,
+
+    #[error("The overlay mutex could not be acquired.")]
+    OverlayMutexNotReady,
+
+    #[error("The ImGui context could not be readied for paint.")]
+    ImGuiNotReady
 }

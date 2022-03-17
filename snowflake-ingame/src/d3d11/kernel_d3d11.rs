@@ -6,8 +6,9 @@ use windows::Win32::Graphics::Direct3D11::{
     D3D11_TEXTURE2D_DESC, ID3D11Device1, ID3D11Texture2D,
 };
 use windows::Win32::Graphics::Dxgi::*;
+use imgui_renderer_dx11::RenderToken;
 
-use crate::common::OverlayWindow;
+use crate::common::{OverlayWindow, RenderError};
 use crate::d3d11::hook::{Direct3D11HookContext, FnPresentHook, FnResizeBuffersHook};
 use crate::d3d11::imgui::Direct3D11ImguiController;
 use crate::d3d11::overlay::Direct3D11Overlay;
@@ -42,7 +43,7 @@ impl Direct3D11Kernel {
         mut overlay: RwLockWriteGuard<Direct3D11Overlay>,
         mut imgui: RwLockWriteGuard<Direct3D11ImguiController>,
         this: &IDXGISwapChain,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<RenderToken, RenderError> {
         // Handle update of any overlay here.
         if let Ok(cmd) = handle.try_recv() {
             match &cmd.ty {
@@ -70,20 +71,17 @@ impl Direct3D11Kernel {
         }
 
         if !overlay.ready_to_initialize() {
-            eprintln!("[dx11] Texture handle not ready");
-            return Ok::<_, Box<dyn Error>>(());
+            return Err(RenderError::OverlayHandleNotReady)
         }
 
         let device = unsafe { this.GetDevice::<ID3D11Device1>()? };
 
         if !overlay.prepare_paint(device, swapchain_desc.OutputWindow) {
-            eprintln!("[dx11] Failed to refresh texture for output window");
-            return Ok::<_, Box<dyn Error>>(());
+            return Err(RenderError::OverlayPaintNotReady)
         }
 
         if !imgui.prepare_paint(&this, size) {
-            eprintln!("[dx11] Failed to setup imgui render state");
-            return Ok::<_, Box<dyn Error>>(());
+            return Err(RenderError::ImGuiNotReady)
         }
 
         // imgui stuff here.
@@ -95,10 +93,11 @@ impl Direct3D11Kernel {
                 overlay.paint(|tid, dim|  OverlayWindow::new(&ui, tid, dim));
                 ui.show_demo_window(&mut false);
                 ui.show_metrics_window(&mut false);
-                render.render(ui.render()).unwrap()
-            });
+                render.render(ui.render())
+            })
+        } else {
+            Err(RenderError::OverlayMutexNotReady)
         }
-        Ok::<_, Box<dyn Error>>(())
     }
 
     fn resize_impl(mut imgui: RwLockWriteGuard<Direct3D11ImguiController>) {
@@ -112,9 +111,14 @@ impl Direct3D11Kernel {
         Box::new(
             move |this: IDXGISwapChain, sync: u32, flags: u32, mut next| {
                 let handle = handle.clone();
-                Direct3D11Kernel::present_impl(handle, overlay.write(),
+                match Direct3D11Kernel::present_impl(handle, overlay.write(),
                                                imgui.write(), &this)
-                    .unwrap_or(());
+                {
+                    Ok(_) => {}
+                    Err(e) => {
+                        eprintln!("[dx11] {}", e)
+                    }
+                }
                 let fp = next.fp_next();
                 fp(this, sync, flags, next)
             },

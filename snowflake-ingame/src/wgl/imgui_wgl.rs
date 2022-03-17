@@ -1,9 +1,9 @@
 use imgui::{Context, DrawData};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::OpenGL::HGLRC;
-use imgui_renderer_ogl::{OpenGLImguiRenderer, RenderError};
+use imgui_renderer_ogl::{OpenGLImguiRenderer,  RenderToken};
 use opengl_bindings::Gl;
-use crate::common::Dimensions;
+use crate::common::{Dimensions, RenderError};
 use crate::wgl::overlay::WGLOverlay;
 
 pub (in crate::wgl) struct WGLImguiController {
@@ -18,11 +18,12 @@ pub(in crate::wgl) struct Render<'a> {
 }
 
 impl Render<'_> {
-    pub fn render(self, draw_data: &DrawData) -> Result<(), RenderError> {
+    pub fn render(self, draw_data: &DrawData) -> Result<RenderToken, RenderError> {
         if let Some(renderer) = self.render {
-            renderer.render(draw_data);
+            Ok(renderer.render(draw_data))
+        } else {
+            Err(RenderError::RendererNotReady)
         }
-        Ok(())
     }
 }
 
@@ -52,16 +53,16 @@ impl WGLImguiController {
     }
 
     // todo: use RenderToken POW
-    pub fn frame<'a, F: FnOnce(&mut Context, Render, &mut WGLOverlay) -> ()>(
+    pub fn frame<'a, F: FnOnce(&mut Context, Render, &mut WGLOverlay) -> Result<RenderToken, RenderError>>(
         &mut self,
         overlay: &mut WGLOverlay,
         f: F,
-    ) {
+    ) -> Result<RenderToken, RenderError> {
         let renderer = Render {
             render: self.renderer.as_mut(),
         };
 
-        f(&mut self.imgui, renderer, overlay);
+        f(&mut self.imgui, renderer, overlay)
     }
 
     pub fn prepare_paint(&mut self, gl: &Gl, window: HWND, ctx: HGLRC, screen_dim: Dimensions) -> bool {

@@ -1,5 +1,4 @@
 use std::ffi::CStr;
-use std::marker::PhantomData;
 use std::mem;
 use std::os::raw::c_char;
 
@@ -36,7 +35,7 @@ impl Renderer {
         self.0.with_renderer_mut(|r| r.create_device_objects(imgui))
     }
 
-    pub fn render<'a>(&mut self, draw_data: &DrawData) -> RenderToken<'a> {
+    pub fn render(&mut self, draw_data: &DrawData) -> RenderToken {
         self.0.with_renderer_mut(|r| r.render(draw_data))
     }
 }
@@ -64,7 +63,7 @@ pub struct RendererInner<'gl> {
 #[derive(Debug, Copy, Clone)]
 pub struct GlVersion(pub i32);
 
-pub struct RenderToken<'a>(PhantomData<&'a ()>);
+pub struct RenderToken;
 
 impl<'gl> RendererInner<'gl> {
     fn set_imgui_metadata(imgui: &mut imgui::Context, ver: GlVersion) {
@@ -144,13 +143,13 @@ impl<'gl> RendererInner<'gl> {
         Ok(())
     }
 
-    fn render<'a>(&mut self, draw_data: &DrawData) -> RenderToken<'a> {
+    fn render(&mut self, draw_data: &DrawData) -> RenderToken {
         // Avoid rendering when minimized
         let fb_width = draw_data.display_size[0] * draw_data.framebuffer_scale[0];
         let fb_height = draw_data.display_size[1] * draw_data.framebuffer_scale[1];
 
         if fb_height <= 0.0 || fb_width <= 0.0 || draw_data.draw_lists_count() == 0 {
-            return RenderToken(PhantomData);
+            return RenderToken;
         }
 
         unsafe {
@@ -169,7 +168,7 @@ impl<'gl> RendererInner<'gl> {
             }
             drop(state);
         }
-        RenderToken(PhantomData)
+        RenderToken
     }
 
     // Safety: vertex_array is not 0 if gl.BindVertexArray is loaded

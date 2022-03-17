@@ -4,8 +4,8 @@ use imgui::{Context, DrawData};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::Direct3D11::{ID3D11Device, ID3D11RenderTargetView, ID3D11Texture2D};
 use windows::Win32::Graphics::Dxgi::{DXGI_SWAP_CHAIN_DESC, IDXGISwapChain};
-use imgui_renderer_dx11::{Direct3D11ImguiRenderer, RenderError};
-use crate::common::Dimensions;
+use imgui_renderer_dx11::{Direct3D11ImguiRenderer, RenderToken};
+use crate::common::{Dimensions, RenderError};
 use crate::d3d11::overlay_d3d11::Direct3D11Overlay;
 use windows::core::Result as HResult;
 
@@ -14,11 +14,12 @@ pub(in crate::d3d11) struct Render<'a> {
 }
 
 impl Render<'_> {
-    pub fn render(self, draw_data: &DrawData) -> Result<(), RenderError> {
+    pub fn render(self, draw_data: &DrawData) -> Result<RenderToken, RenderError> {
         if let Some(renderer) = self.render {
-            renderer.render(draw_data)?;
+            Ok(renderer.render(draw_data)?)
+        } else {
+            Err(RenderError::RendererNotReady)
         }
-        Ok(())
     }
 }
 
@@ -49,17 +50,16 @@ impl Direct3D11ImguiController {
         self.rtv.is_some()
     }
 
-    // todo: use RenderToken POW
-    pub fn frame<'a, F: FnOnce(&mut Context, Render, &mut Direct3D11Overlay) -> ()>(
+    pub fn frame<'a, F: FnOnce(&mut Context, Render, &mut Direct3D11Overlay) -> Result<RenderToken, RenderError>>(
         &mut self,
         overlay: &mut Direct3D11Overlay,
         f: F,
-    ) {
+    ) -> Result<RenderToken, RenderError> {
         let renderer = Render {
             render: self.renderer.as_mut(),
         };
 
-        f(&mut self.imgui, renderer, overlay);
+        f(&mut self.imgui, renderer, overlay)
     }
 
     unsafe fn init_renderer(&mut self, swapchain: &IDXGISwapChain, window: HWND) -> Result<(), RenderError>{

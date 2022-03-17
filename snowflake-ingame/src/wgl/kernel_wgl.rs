@@ -11,8 +11,9 @@ use windows::Win32::Graphics::Gdi::{HDC, WindowFromDC};
 use windows::Win32::Graphics::OpenGL::{HGLRC, wglGetCurrentContext, wglGetProcAddress};
 use windows::Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress};
 use windows::Win32::UI::WindowsAndMessaging::GetClientRect;
+use imgui_renderer_ogl::RenderToken;
 use opengl_bindings::Gl;
-use crate::common::{Dimensions, OverlayWindow};
+use crate::common::{Dimensions, OverlayWindow, RenderError};
 use crate::hook::{HookHandle, HookChain};
 use crate::ipc::cmd::{GameWindowCommand, GameWindowCommandType};
 use crate::ipc::IpcHandle;
@@ -89,7 +90,7 @@ impl WGLKernel {
         hglrc: HGLRC,
         mut overlay: RwLockWriteGuard<WGLOverlay>,
         mut imgui: RwLockWriteGuard<WGLImguiController>,
-    ) {
+    ) -> Result<RenderToken, RenderError>{
         // Handle update of any overlay here.
         if let Ok(cmd) = handle.try_recv() {
             match &cmd.ty {
@@ -111,23 +112,19 @@ impl WGLKernel {
         };
 
         if !overlay.size_matches_viewpoint(&size) {
-            // todo: error
-            handle.send(GameWindowCommand::window_resize(&size)).unwrap();
+            handle.send(GameWindowCommand::window_resize(&size))?;
         }
 
         if !overlay.ready_to_initialize() {
-            eprintln!("[wgl] Texture handle not ready");
-            return;
+            return Err(RenderError::OverlayHandleNotReady)
         }
 
         if !overlay.prepare_paint(gl, window, hglrc) {
-            eprintln!("[wgl] Failed to refresh texture for output window");
-            return;
+            return Err(RenderError::OverlayPaintNotReady)
         }
 
         if !imgui.prepare_paint(gl, window, hglrc, size) {
-            eprintln!("[wgl] Failed to setup imgui render state");
-            return;
+            return Err(RenderError::ImGuiNotReady)
         }
 
         imgui.frame(&mut overlay, |ctx, render, overlay| {
@@ -137,8 +134,9 @@ impl WGLKernel {
             }
             ui.show_metrics_window(&mut false);
             ui.show_demo_window(&mut false);
-            render.render(ui.render()).unwrap()
-        });
+            let token = render.render(ui.render())?;
+            Ok(token)
+        })
     }
 
     pub fn make_swap_buffers(&self) -> FnSwapBuffersHook {
@@ -161,8 +159,13 @@ impl WGLKernel {
             let handle = handle.clone();
             let gl = gl.clone();
 
-            WGLKernel::swapbuffers_impl(&gl.read(), handle, hdc, hglrc,overlay.write(),
-                                        imgui.write());
+            match WGLKernel::swapbuffers_impl(&gl.read(), handle, hdc, hglrc,overlay.write(),
+                                        imgui.write()) {
+                Ok(_) => {},
+                Err(e) => {
+                    eprintln!("[wgl] {}", e);
+                }
+            }
             let fp = next.fp_next();
             fp(hdc, next)
         })

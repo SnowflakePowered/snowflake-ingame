@@ -94,10 +94,10 @@ impl Direct3D11Kernel {
                 let ui = ctx.frame();
                 overlay.paint(|tid, dim|  OverlayWindow::new(&ui, tid, dim));
                 ui.show_demo_window(&mut false);
+                ui.show_metrics_window(&mut false);
                 render.render(ui.render()).unwrap()
             });
         }
-
         Ok::<_, Box<dyn Error>>(())
     }
 

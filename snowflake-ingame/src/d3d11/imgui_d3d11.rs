@@ -39,11 +39,13 @@ impl Direct3D11ImguiController {
         }
     }
 
-    pub const fn renderer_ready(&self) -> bool {
+    #[inline]
+    const fn renderer_ready(&self) -> bool {
         self.renderer.is_some()
     }
 
-    pub const fn rtv_ready(&self) -> bool {
+    #[inline]
+    const fn rtv_ready(&self) -> bool {
         self.rtv.is_some()
     }
 
@@ -112,6 +114,7 @@ impl Direct3D11ImguiController {
         };
 
         if swap_desc.OutputWindow != self.window {
+            eprintln!("[dx11] render context changed");
             self.invalidate_renderer();
             self.invalidate_rtv();
         }

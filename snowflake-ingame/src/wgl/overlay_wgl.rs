@@ -143,7 +143,7 @@ impl WGLOverlay {
             || !gl.ReleaseKeyedMutexWin32EXT.is_loaded()
             || !gl.TextureParameteri.is_loaded()
         {
-            return Err(imgui_renderer_ogl::RenderError::MissingExtensionError("GL_EXT_memory_object_win32, GL_EXT_direct_state_access").into())
+            return Err(imgui_renderer_ogl::RenderError::MissingExtensionError(Box::new("GL_EXT_memory_object_win32, GL_EXT_direct_state_access")).into())
         }
 
         unsafe {
@@ -159,9 +159,9 @@ impl WGLOverlay {
                                   [gl::BLUE, gl::GREEN, gl::RED, gl::ALPHA].as_ptr() as _);
 
             let mut memory = 0;
+            static_assertions::assert_eq_size!(HANDLE, *const core::ffi::c_void);
             gl.CreateMemoryObjectsEXT(1, &mut memory);
-            // todo: check high dpi
-            gl.ImportMemoryWin32HandleEXT(memory, self.size * 2, gl::HANDLE_TYPE_D3D11_IMAGE_EXT,
+            gl.ImportMemoryWin32HandleEXT(memory, self.size, gl::HANDLE_TYPE_D3D11_IMAGE_EXT,
                                           std::mem::transmute_copy(&self.handle));
 
             if gl.AcquireKeyedMutexWin32EXT(memory, 0, GLuint::MAX) == gl::TRUE {

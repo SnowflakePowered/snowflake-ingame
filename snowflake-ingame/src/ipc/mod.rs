@@ -194,8 +194,9 @@ impl IpcHandle {
     pub fn send(
         &self,
         cmd: GameWindowCommand,
-    ) -> Result<(), tokio::sync::mpsc::error::SendError<GameWindowCommand>> {
+    ) -> Result<(), Box<tokio::sync::mpsc::error::SendError<GameWindowCommand>>> {
         self.sender.send(cmd)
+            .map_err(|e| Box::new(e))
     }
 
     #[allow(dead_code)]

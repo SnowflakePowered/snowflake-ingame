@@ -77,6 +77,7 @@ pub struct WindowMessageEventParams {
 pub struct WindowResizeEventParams {
     pub height: i32,
     pub width: i32,
+    pub force: u8,
 }
 
 #[repr(C, packed)]
@@ -128,7 +129,7 @@ impl GameWindowCommand {
         }
     }
 
-    pub const fn window_resize(size: &Dimensions) -> GameWindowCommand {
+    pub const fn window_resize(size: &Dimensions, force: bool) -> GameWindowCommand {
         GameWindowCommand {
             magic: GameWindowMagic::MAGIC,
             ty: GameWindowCommandType::WINDOW_RESIZE,
@@ -136,6 +137,7 @@ impl GameWindowCommand {
                 resize_event: WindowResizeEventParams {
                     height: size.height as i32,
                     width: size.width as i32,
+                    force: force as u8
                 },
             },
         }
@@ -162,6 +164,13 @@ impl<'a> TryFrom<&'a [u8]> for &'a GameWindowCommand {
     type Error = std::io::Error;
 
     fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
+        if value.len() != std::mem::size_of::<GameWindowCommand>() {
+            return Err(std::io::Error::new(
+                ErrorKind::InvalidData,
+                "Received data was not the correct size.",
+            ));
+        }
+
         let (head, body, _tail) = unsafe { value.align_to::<GameWindowCommand>() };
         if !head.is_empty() {
             return Err(std::io::Error::new(

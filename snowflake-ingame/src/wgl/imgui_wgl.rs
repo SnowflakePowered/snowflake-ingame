@@ -1,4 +1,6 @@
+use std::sync::Arc;
 use imgui::{Context, DrawData};
+use parking_lot::RwLock;
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::OpenGL::HGLRC;
 use imgui_renderer_ogl::{OpenGLImguiRenderer,  RenderToken};
@@ -7,7 +9,7 @@ use crate::common::{Dimensions, RenderError};
 use crate::wgl::overlay::WGLOverlay;
 
 pub (in crate::wgl) struct WGLImguiController {
-    imgui: Context,
+    imgui: Arc<RwLock<Context>>,
     renderer: Option<OpenGLImguiRenderer>,
     window: HWND,
     ctx: HGLRC,
@@ -28,9 +30,9 @@ impl Render<'_> {
 }
 
 impl WGLImguiController {
-    pub fn new() -> WGLImguiController {
+    pub fn new(imgui: Arc<RwLock<Context>>) -> WGLImguiController {
         WGLImguiController {
-            imgui: Context::create(),
+            imgui,
             renderer: None,
             window: HWND(0),
             ctx: HGLRC(0),
@@ -41,9 +43,9 @@ impl WGLImguiController {
         self.renderer.is_some()
     }
 
-    unsafe fn init_renderer(&mut self, gl: &Gl, window: HWND) -> Result<(), RenderError> {
+    fn init_renderer(&mut self, gl: &Gl, window: HWND) -> Result<(), RenderError> {
         // Renderer owns its device.
-        self.renderer = Some(OpenGLImguiRenderer::new(&gl, &mut self.imgui)?);
+        self.renderer = Some(OpenGLImguiRenderer::new(&gl, &mut self.imgui.write())?);
         self.window = window;
         Ok(())
     }
@@ -61,7 +63,7 @@ impl WGLImguiController {
             render: self.renderer.as_mut(),
         };
 
-        f(&mut self.imgui, renderer, overlay)
+        f(&mut self.imgui.write(), renderer, overlay)
     }
 
     #[must_use]
@@ -72,11 +74,11 @@ impl WGLImguiController {
         }
 
         if !self.renderer_ready() {
-            unsafe { self.init_renderer(gl, window)? };
+            self.init_renderer(gl, window)?;
         }
 
         // set screen size..
-        self.imgui.io_mut().display_size = screen_dim.into();
+        self.imgui.write().io_mut().display_size = screen_dim.into();
         self.window = window;
         self.ctx = ctx;
         Ok(())

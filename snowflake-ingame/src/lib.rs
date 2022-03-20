@@ -3,6 +3,9 @@
 use std::error::Error;
 use std::ffi::c_void;
 use std::panic::catch_unwind;
+use std::sync::Arc;
+use imgui::Context;
+use parking_lot::RwLock;
 
 use uuid::Uuid;
 use windows::Win32::Foundation::{BOOL, HINSTANCE};
@@ -24,29 +27,20 @@ mod common;
 
 unsafe fn main() -> Result<(), Box<dyn Error>> {
 
-    let mut env = std::env::vars();
     let ipc = IpcConnectionBuilder::new(Uuid::nil());
     let ipc = ipc.connect()?;
 
     let handle = ipc.handle();
 
-    if let Some((_, kernel)) = env.find(|(key, _val)| key == "SNOWFLAKE_GFX_KERNEL") {
-        match kernel.as_str() {
-            "D3D11" => {
-                let mut dx11 = Direct3D11Kernel::new(handle.clone())?;
-                dx11.init()?;
-                println!("[dx11] init finish");
-            }
-            "WGL" => {
-                let mut wgl = WGLKernel::new(handle.clone())?;
-                wgl.init()?;
-                println!("[wgl] init finish");
-            }
-            _ => {
-                println!("[gfx] unknown graphics kernel")
-            }
-        }
-    }
+    let imgui = Arc::new(RwLock::new(Context::create()));
+
+    let mut dx11 = Direct3D11Kernel::new(handle.clone(), imgui.clone())?;
+    dx11.init()?;
+    println!("[dx11] init finish");
+
+    let mut wgl = WGLKernel::new(handle.clone(), imgui.clone())?;
+    wgl.init()?;
+    println!("[wgl] init finish");
 
     ipc.listen()?;
     eprintln!("[ipc] ipc stop");

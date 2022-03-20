@@ -68,7 +68,7 @@ pub struct WGLKernel {
 }
 
 impl WGLKernel {
-    pub fn new(ipc: IpcHandle) -> Result<Self, Box<dyn Error>> {
+    pub fn new(ipc: IpcHandle, imgui: Arc<RwLock<imgui::Context>>) -> Result<Self, Box<dyn Error>> {
         let gl_gpa = unsafe { create_wgl_loader()? };
         let swap_buffers = unsafe { std::mem::transmute(gl_gpa("wglSwapBuffers")) };
         let gl = Gl::load_with(gl_gpa);
@@ -77,7 +77,7 @@ impl WGLKernel {
             ipc,
             hook: WGLHookContext::init(swap_buffers)?,
             gl: Arc::new(RwLock::new(OwnedGl(gl))),
-            imgui: Arc::new(RwLock::new(WGLImguiController::new())),
+            imgui: Arc::new(RwLock::new(WGLImguiController::new(imgui))),
             overlay: Arc::new(RwLock::new(WGLOverlay::new())),
             ctx: Arc::new(AtomicIsize::new(0)),
         })
@@ -113,7 +113,8 @@ impl WGLKernel {
         };
 
         if !overlay.size_matches_viewpoint(&size) {
-            handle.send(GameWindowCommand::window_resize(&size))?;
+            // if overlay is not ready to initialize then handle = 0.
+            handle.send(GameWindowCommand::window_resize(&size, !overlay.ready_to_initialize()))?;
         }
 
         if !overlay.ready_to_initialize() {

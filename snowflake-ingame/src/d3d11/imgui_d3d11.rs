@@ -1,6 +1,7 @@
-use std::mem::MaybeUninit;
 use std::ptr;
+use std::sync::Arc;
 use imgui::{Context, DrawData};
+use parking_lot::RwLock;
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::Direct3D11::{ID3D11Device, ID3D11RenderTargetView, ID3D11Texture2D};
 use windows::Win32::Graphics::Dxgi::{DXGI_SWAP_CHAIN_DESC, IDXGISwapChain};
@@ -24,16 +25,16 @@ impl Render<'_> {
 }
 
 pub(in crate::d3d11) struct Direct3D11ImguiController {
-    imgui: Context,
+    imgui: Arc<RwLock<imgui::Context>>,
     renderer: Option<Direct3D11ImguiRenderer>,
     window: HWND,
     rtv: Option<ID3D11RenderTargetView>,
 }
 
 impl Direct3D11ImguiController {
-    pub fn new() -> Direct3D11ImguiController {
+    pub fn new(imgui: Arc<RwLock<imgui::Context>>) -> Direct3D11ImguiController {
         Direct3D11ImguiController {
-            imgui: Context::create(),
+            imgui,
             renderer: None,
             window: HWND(0),
             rtv: None,
@@ -59,13 +60,13 @@ impl Direct3D11ImguiController {
             render: self.renderer.as_mut(),
         };
 
-        f(&mut self.imgui, renderer, overlay)
+        f(&mut self.imgui.write(), renderer, overlay)
     }
 
-    unsafe fn init_renderer(&mut self, swapchain: &IDXGISwapChain, window: HWND) -> Result<(), RenderError>{
-        let device = swapchain.GetDevice()?;
+    fn init_renderer(&mut self, swapchain: &IDXGISwapChain, window: HWND) -> Result<(), RenderError>{
+        let device = unsafe { swapchain.GetDevice()? };
         // Renderer owns its device.
-        self.renderer = Some(Direct3D11ImguiRenderer::new(&device, &mut self.imgui)?);
+        self.renderer = Some(Direct3D11ImguiRenderer::new(&device, &mut self.imgui.write())?);
         self.window = window;
         Ok(())
     }
@@ -78,28 +79,30 @@ impl Direct3D11ImguiController {
         self.rtv = None;
     }
 
-    unsafe fn init_rtv(&mut self, swapchain: &IDXGISwapChain) -> HResult<()> {
-        let device: ID3D11Device = swapchain.GetDevice()?;
-        let context = {
-            let mut context = MaybeUninit::uninit();
-            device.GetImmediateContext(context.as_mut_ptr());
-            context.assume_init()
-        };
+    fn init_rtv(&mut self, swapchain: &IDXGISwapChain) -> HResult<()> {
+        unsafe {
+            let device: ID3D11Device = swapchain.GetDevice()?;
+            let context = {
+                let mut context = None;
+                device.GetImmediateContext(&mut context);
+                context
+            };
 
-        let mut rtv = [None];
-        if let Some(context) = &context {
-            context.OMGetRenderTargets(&mut rtv, ptr::null_mut());
-        }
-
-        if let Some(Some(rtv)) = rtv.into_iter().next() {
-            self.rtv = Some(rtv)
-        } else {
-            let back_buffer: ID3D11Texture2D = swapchain.GetBuffer(0)?;
-            let rtv = device.CreateRenderTargetView(back_buffer, std::ptr::null())?;
+            let mut rtv = [None];
             if let Some(context) = &context {
-                context.OMSetRenderTargets(&[Some(rtv.clone())], None);
+                context.OMGetRenderTargets(&mut rtv, ptr::null_mut());
             }
-            self.rtv = Some(rtv);
+
+            if let Some(Some(rtv)) = rtv.into_iter().next() {
+                self.rtv = Some(rtv)
+            } else {
+                let back_buffer: ID3D11Texture2D = swapchain.GetBuffer(0)?;
+                let rtv = device.CreateRenderTargetView(back_buffer, std::ptr::null())?;
+                if let Some(context) = &context {
+                    context.OMSetRenderTargets(&[Some(rtv.clone())], None);
+                }
+                self.rtv = Some(rtv);
+            }
         }
         Ok(())
     }
@@ -115,15 +118,15 @@ impl Direct3D11ImguiController {
         }
 
         if !self.renderer_ready() {
-            unsafe { self.init_renderer(swapchain, swap_desc.OutputWindow)? };
+            self.init_renderer(swapchain, swap_desc.OutputWindow)?;
         }
 
         if !self.rtv_ready() {
-            unsafe { self.init_rtv(&swapchain)? }
+            self.init_rtv(&swapchain)?;
         }
 
         // set screen size..
-        self.imgui.io_mut().display_size = screen_dim.into();
+        self.imgui.write().io_mut().display_size = screen_dim.into();
         self.window = swap_desc.OutputWindow;
         Ok(())
     }

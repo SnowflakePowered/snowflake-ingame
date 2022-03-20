@@ -64,7 +64,7 @@ impl OverlayWindow {
 #[derive(thiserror::Error, Debug)]
 pub enum RenderError {
     #[error("A IPC error has occured ({0:?}).")]
-    IpcError(#[from] tokio::sync::mpsc::error::SendError<GameWindowCommand>),
+    IpcError(#[from] Box<tokio::sync::mpsc::error::SendError<GameWindowCommand>>),
 
     #[error("A internal OpenGL error occurred ({0:?}).")]
     OpenGLInternalError(#[from] imgui_renderer_ogl::RenderError),
@@ -72,23 +72,23 @@ pub enum RenderError {
     #[error("A internal Direct3D11 error occurred ({0:?}).")]
     Direct3D11InternalError(#[from] imgui_renderer_dx11::RenderError),
 
-    #[error("A internal DXGI error occurred ({0:?}).")]
+    #[error("A internal DXGI error occurred ({0:x?}).")]
     DXGIInternalError(#[from] windows::core::Error),
 
     #[error("The requested renderer has not been initialized.")]
     RendererNotReady,
 
-    #[error("Error occurred when trying to open shared handle {0:x?} ({0:?}).")]
-    OverlayHandleError(HANDLE, windows::core::Error),
+    #[error("Error occurred when trying to open shared handle {0:x?} ({1:x?}).")]
+    OverlayHandleError(HANDLE, windows::core::Error), // 128 + 64
 
     #[error("The overlay texture handle has not been initialized.")]
     OverlayHandleNotReady,
 
-    #[error("The overlay could not be initialized. {0}")]
-    OverlayPaintNotReady(Box<RenderError>),
-
     #[error("The overlay mutex could not be acquired.")]
     OverlayMutexNotReady,
+
+    #[error("The overlay could not be initialized. {0}")]
+    OverlayPaintNotReady(Box<RenderError>),
 
     #[error("The ImGui context could not be readied for paint. {0}")]
     ImGuiNotReady(Box<RenderError>)

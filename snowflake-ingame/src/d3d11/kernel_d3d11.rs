@@ -29,11 +29,11 @@ pub struct Direct3D11Kernel {
 }
 
 impl Direct3D11Kernel {
-    pub fn new(ipc: IpcHandle) -> Result<Self, Box<dyn Error>> {
+    pub fn new(ipc: IpcHandle, imgui: Arc<RwLock<imgui::Context>>) -> Result<Self, Box<dyn Error>> {
         Ok(Direct3D11Kernel {
             hook: Direct3D11HookContext::init()?,
             overlay: Arc::new(RwLock::new(Direct3D11Overlay::new())),
-            imgui: Arc::new(RwLock::new(Direct3D11ImguiController::new())),
+            imgui: Arc::new(RwLock::new(Direct3D11ImguiController::new(imgui))),
             ipc,
         })
     }
@@ -68,7 +68,7 @@ impl Direct3D11Kernel {
 
         let size = backbuffer_desc.into();
         if !overlay.size_matches_viewpoint(&size) {
-            handle.send(GameWindowCommand::window_resize(&size))?;
+            handle.send(GameWindowCommand::window_resize(&size, !overlay.ready_to_initialize()))?;
         }
 
         if !overlay.ready_to_initialize() {

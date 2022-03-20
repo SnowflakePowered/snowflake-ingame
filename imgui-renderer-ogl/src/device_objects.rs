@@ -102,7 +102,7 @@ impl Shader {
             gl.GetShaderiv(handle, COMPILE_STATUS, &mut status);
             gl.GetShaderiv(handle, INFO_LOG_LENGTH, &mut log_length);
             if status == opengl_bindings::FALSE as GLint {
-                return Err(RenderError::CompileError(self.ty, version));
+                return Err(RenderError::CompileError(self.ty, Box::new(version)));
             }
         }
         Ok(())

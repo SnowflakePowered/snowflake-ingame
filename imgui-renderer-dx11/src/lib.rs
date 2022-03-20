@@ -21,6 +21,7 @@ pub trait ImguiTexture {
 
 impl ImguiTexture for ID3D11ShaderResourceView {
     fn as_tex_id(&self) -> TextureId {
+        static_assertions::assert_eq_size!(ID3D11ShaderResourceView, usize);
         let srv = self.clone();
         unsafe {
             TextureId::from(std::mem::transmute::<_, *const ()>(srv) as usize)

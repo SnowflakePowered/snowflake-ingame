@@ -97,8 +97,11 @@ impl Direct3D11Overlay {
 
         self.invalidate();
 
+
         let tex_2d: ID3D11Texture2D = unsafe { device.OpenSharedResource1(self.handle) }
-            .map_err(|e| RenderError::OverlayHandleError(self.handle, e))?;
+            .map_err(|e| {
+                RenderError::OverlayHandleError(self.handle, e)
+            })?;
 
 
         let tex_mtx: IDXGIKeyedMutex = Interface::cast(&tex_2d)?;

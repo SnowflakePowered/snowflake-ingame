@@ -22,7 +22,8 @@ use crate::wgl::imgui::WGLImguiController;
 use crate::wgl::overlay::WGLOverlay;
 
 use crate::kernel::common::{FrameKernel, KernelContext};
-use crate::win32::wndproc::{WndProcHandle, WndProcHook};
+use crate::win32::wndproc::{WndProcHandle};
+use windows::Win32::UI::WindowsAndMessaging::WM_MOUSEMOVE;
 
 // this is so bad...
 pub(in crate::wgl) struct OwnedGl(Gl);
@@ -68,8 +69,7 @@ pub struct WGLKernel {
     imgui: Arc<RwLock<WGLImguiController>>,
     overlay: Arc<RwLock<WGLOverlay>>,
     ctx: Arc<AtomicIsize>,
-    wp_recv: Option<WndProcHandle>,
-    wp: Arc<RwLock<Option<WndProcHook>>>
+    wp: Arc<RwLock<WndProcHandle>>
 }
 
 impl FrameKernel for WGLKernel {
@@ -88,8 +88,7 @@ impl FrameKernel for WGLKernel {
             imgui: Arc::new(RwLock::new(WGLImguiController::new(imgui))),
             overlay: Arc::new(RwLock::new(WGLOverlay::new())),
             ctx: Arc::new(AtomicIsize::new(0)),
-            wp_recv: None,
-            wp: Arc::new(RwLock::new(None))
+            wp: Arc::new(RwLock::new(WndProcHandle::new()))
         })
     }
 
@@ -111,7 +110,7 @@ impl WGLKernel {
         hglrc: HGLRC,
         mut overlay: RwLockWriteGuard<WGLOverlay>,
         mut imgui: RwLockWriteGuard<WGLImguiController>,
-        mut wndproc: RwLockWriteGuard<Option<WndProcHook>>
+        mut wndproc: RwLockWriteGuard<WndProcHandle>
     ) -> Result<RenderToken, RenderError>{
         // Handle update of any overlay here.
         if let Ok(cmd) = handle.try_recv() {
@@ -126,6 +125,17 @@ impl WGLKernel {
         }
 
         let window = unsafe { WindowFromDC(hdc) };
+        wndproc.attach(window);
+
+        if let Ok(wp) = wndproc.try_recv() {
+            match wp.msg {
+                WM_MOUSEMOVE => {
+                    eprintln!("mm");
+                }
+                _ => {}
+            }
+        }
+
         let mut client_rect = Default::default();
         unsafe { GetClientRect(window, &mut client_rect) };
 
@@ -143,18 +153,6 @@ impl WGLKernel {
             return Err(RenderError::OverlayHandleNotReady)
         }
 
-        match wndproc.deref() {
-            None => {
-                let (wp, wh) = unsafe { WndProcHook::new(window).unwrap() };
-                std::mem::swap(wndproc.deref_mut(), &mut Some(wp))
-            }
-            Some(wp) => {
-                if !wp.for_hwnd(window) {
-                    let (wp, wh) = unsafe { WndProcHook::new(window).unwrap() };
-                    std::mem::swap(wndproc.deref_mut(), &mut Some(wp))
-                }
-            }
-        }
 
         overlay.prepare_paint(gl, window, hglrc)
             .map_err(|e| RenderError::OverlayPaintNotReady(Box::new(e)))?;

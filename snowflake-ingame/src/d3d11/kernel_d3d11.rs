@@ -12,6 +12,7 @@ use crate::common::{OverlayWindow, RenderError};
 use crate::d3d11::hook::{Direct3D11HookContext, FnPresentHook, FnResizeBuffersHook};
 use crate::d3d11::imgui::Direct3D11ImguiController;
 use crate::d3d11::overlay::Direct3D11Overlay;
+use crate::{FrameKernel, KernelContext};
 use crate::hook::{HookChain, HookHandle};
 use crate::ipc::cmd::{GameWindowCommand, GameWindowCommandType};
 use crate::ipc::IpcHandle;
@@ -28,8 +29,11 @@ pub struct Direct3D11Kernel {
     ipc: IpcHandle,
 }
 
-impl Direct3D11Kernel {
-    pub fn new(ipc: IpcHandle, imgui: Arc<RwLock<imgui::Context>>) -> Result<Self, Box<dyn Error>> {
+impl FrameKernel for Direct3D11Kernel {
+    type Handle = impl HookHandle;
+
+    fn new(context: KernelContext) -> Result<Self, Box<dyn Error>> {
+        let KernelContext { ipc, imgui } = context;
         Ok(Direct3D11Kernel {
             hook: Direct3D11HookContext::init()?,
             overlay: Arc::new(RwLock::new(Direct3D11Overlay::new())),
@@ -38,6 +42,16 @@ impl Direct3D11Kernel {
         })
     }
 
+    fn init(&mut self) -> Result<ManuallyDrop<Self::Handle>, Box<dyn Error>> {
+        println!("[dx11] init");
+        let handle = self.hook
+            .new(self.make_present(), self.make_resize())?
+            .persist();
+        Ok(handle)
+    }
+}
+
+impl Direct3D11Kernel {
     fn present_impl(
         handle: IpcHandle,
         mut overlay: RwLockWriteGuard<Direct3D11Overlay>,
@@ -133,14 +147,5 @@ impl Direct3D11Kernel {
                 fp(this, buf_cnt, width, height, format, flags, next)
             },
         )
-    }
-
-    pub fn init(&mut self) -> Result<ManuallyDrop<impl HookHandle>, Box<dyn Error>> {
-        println!("[dx11] init");
-        let handle = self.hook
-            .new(self.make_present(), self.make_resize())?
-            .persist();
-
-        Ok(handle)
     }
 }

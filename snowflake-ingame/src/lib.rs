@@ -1,4 +1,6 @@
 #![feature(once_cell)]
+#![feature(type_alias_impl_trait)]
+#![feature(associated_type_defaults)]
 
 use std::error::Error;
 use std::ffi::c_void;
@@ -15,6 +17,7 @@ use windows::Win32::System::SystemServices::DLL_PROCESS_ATTACH;
 use crate::d3d11::Direct3D11Kernel;
 use crate::hook::*;
 use crate::ipc::IpcConnectionBuilder;
+use crate::kernel::common::{FrameKernel, KernelContext};
 use crate::wgl::WGLKernel;
 
 mod d3d11;
@@ -23,7 +26,7 @@ mod ipc;
 mod wgl;
 mod win32;
 mod common;
-
+mod kernel;
 
 unsafe fn main() -> Result<(), Box<dyn Error>> {
 
@@ -34,11 +37,16 @@ unsafe fn main() -> Result<(), Box<dyn Error>> {
 
     let imgui = Arc::new(RwLock::new(Context::create()));
 
-    let mut dx11 = Direct3D11Kernel::new(handle.clone(), imgui.clone())?;
+    let context = KernelContext {
+        imgui: imgui.clone(),
+        ipc: handle.clone()
+    };
+
+    let mut dx11 = Direct3D11Kernel::new(context.clone())?;
     dx11.init()?;
     println!("[dx11] init finish");
 
-    let mut wgl = WGLKernel::new(handle.clone(), imgui.clone())?;
+    let mut wgl = WGLKernel::new(context)?;
     wgl.init()?;
     println!("[wgl] init finish");
 

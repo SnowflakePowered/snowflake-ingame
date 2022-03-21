@@ -21,6 +21,8 @@ use crate::wgl::hook::{FnSwapBuffersHook, WGLHookContext};
 use crate::wgl::imgui::WGLImguiController;
 use crate::wgl::overlay::WGLOverlay;
 
+use crate::kernel::common::{FrameKernel, KernelContext};
+
 // this is so bad...
 pub(in crate::wgl) struct OwnedGl(Gl);
 unsafe impl Send for OwnedGl {}
@@ -67,8 +69,11 @@ pub struct WGLKernel {
     ctx: Arc<AtomicIsize>,
 }
 
-impl WGLKernel {
-    pub fn new(ipc: IpcHandle, imgui: Arc<RwLock<imgui::Context>>) -> Result<Self, Box<dyn Error>> {
+impl FrameKernel for WGLKernel {
+    type Handle = impl HookHandle;
+
+    fn new(context: KernelContext) -> Result<Self, Box<dyn Error>> {
+        let KernelContext { ipc, imgui } = context;
         let gl_gpa = unsafe { create_wgl_loader()? };
         let swap_buffers = unsafe { std::mem::transmute(gl_gpa("wglSwapBuffers")) };
         let gl = Gl::load_with(gl_gpa);
@@ -83,6 +88,17 @@ impl WGLKernel {
         })
     }
 
+    fn init(&mut self) -> Result<ManuallyDrop<Self::Handle>, Box<dyn Error>> {
+        println!("[wgl] init");
+        let handle = self.hook
+            .new(self.make_swap_buffers())?
+            .persist();
+
+        Ok(handle)
+    }
+}
+
+impl WGLKernel {
     fn swapbuffers_impl(
         gl: &Gl,
         handle: IpcHandle,
@@ -139,7 +155,7 @@ impl WGLKernel {
         })
     }
 
-    pub fn make_swap_buffers(&self) -> FnSwapBuffersHook {
+    fn make_swap_buffers(&self) -> FnSwapBuffersHook {
         let handle = self.ipc.clone();
         let imgui = self.imgui.clone();
         let overlay = self.overlay.clone();
@@ -169,14 +185,5 @@ impl WGLKernel {
             let fp = next.fp_next();
             fp(hdc, next)
         })
-    }
-
-    pub fn init(&mut self) -> Result<ManuallyDrop<impl HookHandle>, Box<dyn Error>> {
-        println!("[wgl] init");
-        let handle = self.hook
-            .new(self.make_swap_buffers())?
-            .persist();
-
-        Ok(handle)
     }
 }

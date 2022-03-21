@@ -61,7 +61,7 @@ impl Direct3D11Kernel {
         // Handle update of any overlay here.
         if let Ok(cmd) = handle.try_recv() {
             match &cmd.ty {
-                &GameWindowCommandType::OVERLAY => {
+                &GameWindowCommandType::OVERLAY_TEXTURE => {
                     eprintln!("[dx11] received overlay texture event");
                     overlay.refresh( unsafe { cmd.params.overlay_event })
                         .unwrap_or_else(|e| eprintln!("[dx11] handle error: {}", e));

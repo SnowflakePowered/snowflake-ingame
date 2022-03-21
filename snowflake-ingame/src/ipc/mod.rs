@@ -64,10 +64,10 @@ pub struct IpcHandle {
 pub struct IpcConnection {
     ctx: Runtime,
     pipe: NamedPipeClient,
-    cmd_client_tx: tokio::sync::mpsc::UnboundedSender<GameWindowCommand>,
-    cmd_client_rx: crossbeam_channel::Receiver<GameWindowCommand>,
-    cmd_rx: tokio::sync::mpsc::UnboundedReceiver<GameWindowCommand>,
-    cmd_tx: crossbeam_channel::Sender<GameWindowCommand>,
+    remote_tx: tokio::sync::mpsc::UnboundedSender<GameWindowCommand>,
+    local_rx: crossbeam_channel::Receiver<GameWindowCommand>,
+    remote_rx: tokio::sync::mpsc::UnboundedReceiver<GameWindowCommand>,
+    local_tx: crossbeam_channel::Sender<GameWindowCommand>,
 }
 
 impl IpcConnectionBuilder {
@@ -103,10 +103,10 @@ impl IpcConnectionBuilder {
         Ok(IpcConnection {
             ctx: self.ctx,
             pipe,
-            cmd_rx: rx,
-            cmd_tx: tx,
-            cmd_client_tx: client_tx,
-            cmd_client_rx: client_rx,
+            remote_rx: rx,
+            local_tx: tx,
+            remote_tx: client_tx,
+            local_rx: client_rx,
         })
     }
 
@@ -121,15 +121,21 @@ impl IpcConnectionBuilder {
 impl IpcConnection {
     pub fn handle(&self) -> IpcHandle {
         IpcHandle {
-            sender: UnboundedSender::clone(&self.cmd_client_tx),
-            events: crossbeam_channel::Receiver::clone(&self.cmd_client_rx),
+            sender: UnboundedSender::clone(&self.remote_tx),
+            events: crossbeam_channel::Receiver::clone(&self.local_rx),
         }
     }
 
     pub fn listen(self) -> Result<(), Box<dyn Error>> {
         let client = self.pipe;
-        let mut cmd_rx = self.cmd_rx;
-        let cmd_tx = self.cmd_tx;
+        let mut remote_rx = self.remote_rx;
+        let local_tx = self.local_tx;
+
+        // Prevent this from clogging up the channel.
+        drop(self.local_rx);
+
+        // No more handles can be created.
+        drop(self.remote_tx);
         self.ctx
             .block_on(async move {
                 loop {
@@ -143,7 +149,7 @@ impl IpcConnection {
                             Ok(_n) => {
                                 match TryInto::<&GameWindowCommand>::try_into(data.as_slice()) {
                                     Ok(cmd) => {
-                                        match cmd_tx.send(*cmd) {
+                                        match local_tx.send(*cmd) {
                                             Ok(()) => {
                                                 //  println!("[ipc] Recv cmd {}", cmd.ty.0)
                                             }
@@ -165,7 +171,7 @@ impl IpcConnection {
                     }
 
                     if ready.is_writable() {
-                        match cmd_rx.try_recv() {
+                        match remote_rx.try_recv() {
                             Ok(cmd) => {
                                 match client.try_write((&cmd).into()) {
                                     Ok(_n) => {

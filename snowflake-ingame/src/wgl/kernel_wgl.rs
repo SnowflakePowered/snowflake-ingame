@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicIsize, Ordering};
 use parking_lot::{RwLock, RwLockWriteGuard};
 use windows::core::{HRESULT, HSTRING, PCSTR};
-use windows::Win32::Foundation::GetLastError;
+use windows::Win32::Foundation::{GetLastError, HWND};
 use windows::Win32::Graphics::Gdi::{HDC, WindowFromDC};
 use windows::Win32::Graphics::OpenGL::{HGLRC, wglGetCurrentContext, wglGetProcAddress};
 use windows::Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress};
@@ -22,6 +22,7 @@ use crate::wgl::imgui::WGLImguiController;
 use crate::wgl::overlay::WGLOverlay;
 
 use crate::kernel::common::{FrameKernel, KernelContext};
+use crate::win32::wndproc::{WndProcHandle, WndProcHook};
 
 // this is so bad...
 pub(in crate::wgl) struct OwnedGl(Gl);
@@ -67,6 +68,8 @@ pub struct WGLKernel {
     imgui: Arc<RwLock<WGLImguiController>>,
     overlay: Arc<RwLock<WGLOverlay>>,
     ctx: Arc<AtomicIsize>,
+    wp_recv: Option<WndProcHandle>,
+    wp: Arc<RwLock<Option<WndProcHook>>>
 }
 
 impl FrameKernel for WGLKernel {
@@ -85,6 +88,8 @@ impl FrameKernel for WGLKernel {
             imgui: Arc::new(RwLock::new(WGLImguiController::new(imgui))),
             overlay: Arc::new(RwLock::new(WGLOverlay::new())),
             ctx: Arc::new(AtomicIsize::new(0)),
+            wp_recv: None,
+            wp: Arc::new(RwLock::new(None))
         })
     }
 
@@ -106,11 +111,12 @@ impl WGLKernel {
         hglrc: HGLRC,
         mut overlay: RwLockWriteGuard<WGLOverlay>,
         mut imgui: RwLockWriteGuard<WGLImguiController>,
+        mut wndproc: RwLockWriteGuard<Option<WndProcHook>>
     ) -> Result<RenderToken, RenderError>{
         // Handle update of any overlay here.
         if let Ok(cmd) = handle.try_recv() {
             match &cmd.ty {
-                &GameWindowCommandType::OVERLAY => {
+                &GameWindowCommandType::OVERLAY_TEXTURE => {
                     eprintln!("[wgl] received overlay texture event");
                     overlay.refresh( unsafe { cmd.params.overlay_event })
                         .unwrap_or_else(|e| eprintln!("[wgl] handle error: {}", e));
@@ -137,6 +143,19 @@ impl WGLKernel {
             return Err(RenderError::OverlayHandleNotReady)
         }
 
+        match wndproc.deref() {
+            None => {
+                let (wp, wh) = unsafe { WndProcHook::new(window).unwrap() };
+                std::mem::swap(wndproc.deref_mut(), &mut Some(wp))
+            }
+            Some(wp) => {
+                if !wp.for_hwnd(window) {
+                    let (wp, wh) = unsafe { WndProcHook::new(window).unwrap() };
+                    std::mem::swap(wndproc.deref_mut(), &mut Some(wp))
+                }
+            }
+        }
+
         overlay.prepare_paint(gl, window, hglrc)
             .map_err(|e| RenderError::OverlayPaintNotReady(Box::new(e)))?;
 
@@ -161,7 +180,11 @@ impl WGLKernel {
         let overlay = self.overlay.clone();
         let gl = self.gl.clone();
         let ctx = self.ctx.clone();
+
+        // let wp_r = self.wp_recv.clone();
+        let wp_h = self.wp.clone();
         Box::new(move |hdc, mut next| {
+            // Deal with this here instead of within the impl
             let hglrc = unsafe { wglGetCurrentContext() };
             unsafe {
                 let old_ctx = ctx.swap(hglrc.0, Ordering::SeqCst);
@@ -176,7 +199,7 @@ impl WGLKernel {
             let gl = gl.clone();
 
             match WGLKernel::swapbuffers_impl(&gl.read(), handle, hdc, hglrc,overlay.write(),
-                                        imgui.write()) {
+                                        imgui.write(), wp_h.write()) {
                 Ok(_) => {},
                 Err(e) => {
                     eprintln!("[wgl] {}", e);

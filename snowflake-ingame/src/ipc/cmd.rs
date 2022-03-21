@@ -25,8 +25,9 @@ impl GameWindowCommandType {
     pub const WINDOW_MESSAGE: GameWindowCommandType = Self(3);
     pub const MOUSE: GameWindowCommandType = Self(4);
     pub const CURSOR: GameWindowCommandType = Self(5);
-    pub const OVERLAY: GameWindowCommandType = Self(6);
-    pub const SHUTDOWN: GameWindowCommandType = Self(7);
+    pub const OVERLAY_TEXTURE: GameWindowCommandType = Self(6);
+    pub const OVERLAY_ACTIVE: GameWindowCommandType = Self(7);
+    pub const SHUTDOWN: GameWindowCommandType = Self(8);
 }
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
@@ -78,6 +79,12 @@ pub struct WindowResizeEventParams {
     pub height: i32,
     pub width: i32,
     pub force: u8,
+}
+
+#[repr(C, packed)]
+#[derive(Debug, Clone, Copy)]
+pub struct OverlayActiveEventParams {
+    pub active: u8,
 }
 
 #[repr(C, packed)]

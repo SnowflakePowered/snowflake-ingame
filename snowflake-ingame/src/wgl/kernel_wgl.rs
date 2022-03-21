@@ -127,13 +127,8 @@ impl WGLKernel {
         let window = unsafe { WindowFromDC(hdc) };
         wndproc.attach(window);
 
-        if let Ok(wp) = wndproc.try_recv() {
-            match wp.msg {
-                WM_MOUSEMOVE => {
-                    eprintln!("mm");
-                }
-                _ => {}
-            }
+        while let Ok(wp) = wndproc.try_recv() {
+            eprintln!("{:?}", wp);
         }
 
         let mut client_rect = Default::default();

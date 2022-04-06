@@ -1,6 +1,7 @@
 #![feature(once_cell)]
 #![feature(type_alias_impl_trait)]
 #![feature(associated_type_defaults)]
+#![feature(strict_provenance)]
 
 use std::error::Error;
 use std::ffi::c_void;

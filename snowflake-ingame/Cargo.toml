@@ -53,3 +53,7 @@ parking_lot = { version = "0.12.0", features = ["send_guard"] }
 thiserror = "1.0.30"
 static_assertions = "1.1.0"
 dashmap = "5.2.0"
+
+[features]
+default = ["strict-provenance"]
+strict-provenance = ["imgui-renderer-dx11/strict-provenance"]

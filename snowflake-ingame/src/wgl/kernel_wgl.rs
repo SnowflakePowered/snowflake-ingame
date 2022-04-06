@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicIsize, Ordering};
 use parking_lot::{RwLock, RwLockWriteGuard};
 use windows::core::{HRESULT, HSTRING, PCSTR};
-use windows::Win32::Foundation::{GetLastError, HWND};
+use windows::Win32::Foundation::GetLastError;
 use windows::Win32::Graphics::Gdi::{HDC, WindowFromDC};
 use windows::Win32::Graphics::OpenGL::{HGLRC, wglGetCurrentContext, wglGetProcAddress};
 use windows::Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress};
@@ -23,7 +23,6 @@ use crate::wgl::overlay::WGLOverlay;
 
 use crate::kernel::common::{FrameKernel, KernelContext};
 use crate::win32::wndproc::{WndProcHandle};
-use windows::Win32::UI::WindowsAndMessaging::WM_MOUSEMOVE;
 
 // this is so bad...
 pub(in crate::wgl) struct OwnedGl(Gl);
@@ -128,7 +127,7 @@ impl WGLKernel {
         wndproc.attach(window);
 
         while let Ok(wp) = wndproc.try_recv() {
-            eprintln!("{:?}", wp);
+            // eprintln!("{:?}", wp);
         }
 
         let mut client_rect = Default::default();

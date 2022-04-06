@@ -257,8 +257,18 @@ impl Renderer {
                         self.context.RSSetScissorRects(&[rect]);
 
                         // srv will be dropped after rendering.
-                        let texture_srv: ID3D11ShaderResourceView =
-                            std::mem::transmute(cmd_params.texture_id.id());
+
+                        #[cfg(not(feature = "strict-provenance"))]
+                        let texture_srv: ID3D11ShaderResourceView = std::mem::transmute(cmd_params.texture_id.id());
+
+                        // 'Preserve' provenance of texids.
+                        // doesn't really actually do anything, but semantically expresses the correct
+                        // intent.
+                        #[cfg(feature = "strict-provenance")]
+                        let texture_srv: ID3D11ShaderResourceView = {
+                            std::mem::transmute(std::ptr::from_exposed_addr_mut::<*mut core::ffi::c_void>
+                                (cmd_params.texture_id.id()))
+                        };
 
                         // Bind texture, Draw
                         self.context

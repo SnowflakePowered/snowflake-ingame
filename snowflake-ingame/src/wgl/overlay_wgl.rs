@@ -159,10 +159,12 @@ impl WGLOverlay {
                                   [gl::BLUE, gl::GREEN, gl::RED, gl::ALPHA].as_ptr() as _);
 
             let mut memory = 0;
-            static_assertions::assert_eq_size!(HANDLE, *const core::ffi::c_void);
             gl.CreateMemoryObjectsEXT(1, &mut memory);
+
+            // strict_provenance: handle is an int, this is fine.
+            // https://github.com/microsoft/windows-rs/issues/1643
             gl.ImportMemoryWin32HandleEXT(memory, self.size, gl::HANDLE_TYPE_D3D11_IMAGE_EXT,
-                                          std::mem::transmute_copy(&self.handle));
+                                          self.handle.0 as *mut core::ffi::c_void);
 
             if gl.AcquireKeyedMutexWin32EXT(memory, 0, GLuint::MAX) == gl::TRUE {
                 // todo: check gl error

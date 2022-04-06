@@ -59,7 +59,16 @@ struct OMBackup<'ctx> {
 
 impl Default for OMBackup<'_> {
     fn default() -> Self {
-        unsafe { std::mem::zeroed() }
+        const INIT_RTV: Option<ID3D11RenderTargetView> = None;
+        const INIT_UAV: Option<ID3D11UnorderedAccessView> = None;
+        Self {
+            _parent: None,
+            render_target_views: [INIT_RTV; D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT as usize],
+            unordered_access_views: [INIT_UAV; D3D11_1_UAV_SLOT_COUNT as usize],
+            blend_state: (None, 0f32, 0),
+            depth_stencil: (None, 0),
+            depth_stencil_view: None
+        }
     }
 }
 
@@ -230,7 +239,20 @@ macro_rules! make_shader_backup {
 
         impl Default for $backup<'_> {
             fn default() -> Self {
-                unsafe { std::mem::zeroed() }
+                const INIT_CLS: Option<ID3D11ClassInstance> = None;
+                const INIT_SAMPLER: Option<ID3D11SamplerState> = None;
+                const INIT_SRV: Option<ID3D11ShaderResourceView> = None;
+                const INIT_BUF: Option<ID3D11Buffer> = None;
+
+                Self {
+                    _parent: None,
+                    shader_state: None,
+                    num_instances: 0,
+                    class_instances: [INIT_CLS; D3D11_MAX_CLASS_INSTANCES],
+                    sampler_states: [INIT_SAMPLER; D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT as usize],
+                    resource_views: [INIT_SRV; D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT as usize],
+                    const_buffers: [INIT_BUF; D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT as usize],
+                }
             }
         }
 
@@ -341,9 +363,23 @@ struct CSBackup<'ctx> {
 
 impl Default for CSBackup<'_> {
     fn default() -> Self {
-        unsafe { std::mem::zeroed() }
-    }
-}
+        const INIT_CLS: Option<ID3D11ClassInstance> = None;
+        const INIT_SAMPLER: Option<ID3D11SamplerState> = None;
+        const INIT_SRV: Option<ID3D11ShaderResourceView> = None;
+        const INIT_BUF: Option<ID3D11Buffer> = None;
+        const INIT_UAV: Option<ID3D11UnorderedAccessView> = None;
+
+        Self {
+            _parent: None,
+            shader_state: None,
+            num_instances: 0,
+            class_instances: [INIT_CLS; D3D11_MAX_CLASS_INSTANCES],
+            sampler_states: [INIT_SAMPLER; D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT as usize],
+            resource_views: [INIT_SRV; D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT as usize],
+            const_buffers: [INIT_BUF; D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT as usize],
+            unordered_access_views: [INIT_UAV; D3D11_1_UAV_SLOT_COUNT as usize]
+        }
+    }}
 
 impl<'ctx> CSBackup<'ctx> {
     unsafe fn backup(context: &'ctx ID3D11DeviceContext) -> Self {

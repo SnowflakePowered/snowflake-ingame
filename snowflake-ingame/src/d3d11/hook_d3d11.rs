@@ -1,19 +1,13 @@
 use std::error::Error;
 
 use detour::static_detour;
-use windows::core::Interface;
+use windows::core::{HSTRING, Interface};
 use windows::Win32::Foundation::{BOOL, HINSTANCE};
 use windows::Win32::Graphics::Direct3D::{
     D3D_DRIVER_TYPE_HARDWARE, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_11_1,
 };
-use windows::Win32::Graphics::Direct3D11::{
-    D3D11_CREATE_DEVICE_FLAG, D3D11_SDK_VERSION, D3D11CreateDeviceAndSwapChain,
-    ID3D11Device_Vtbl,
-};
-use windows::Win32::Graphics::Dxgi::{
-    DXGI_SWAP_CHAIN_DESC, DXGI_SWAP_EFFECT_DISCARD, DXGI_USAGE_RENDER_TARGET_OUTPUT, IDXGISwapChain,
-    IDXGISwapChain_Vtbl,
-};
+use windows::Win32::Graphics::Direct3D11::{D3D11_CREATE_DEVICE_FLAG, D3D11_SDK_VERSION, D3D11CreateDevice, ID3D11Device_Vtbl};
+use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory, DXGI_ERROR_INVALID_CALL, DXGI_SWAP_CHAIN_DESC, DXGI_SWAP_EFFECT_DISCARD, DXGI_USAGE_RENDER_TARGET_OUTPUT, IDXGIFactory, IDXGISwapChain, IDXGISwapChain_Vtbl};
 use windows::Win32::Graphics::Dxgi::Common::{
     DXGI_FORMAT, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_MODE_DESC, DXGI_MODE_SCALING_UNSPECIFIED,
     DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED, DXGI_RATIONAL, DXGI_SAMPLE_DESC,
@@ -59,30 +53,31 @@ fn get_vtables() -> Result<VTables, Box<dyn Error>> {
     };
 
     let feature_levels = vec![D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_11_1];
-    let mut out_swapchain = None;
     let mut out_device = None;
-    let mut out_context = None;
-    let mut out_feature_level = D3D_FEATURE_LEVEL_11_0;
+    let mut _out_context = None;
+    let mut _out_feature_level = D3D_FEATURE_LEVEL_11_0;
 
-    let _res = unsafe {
-        D3D11CreateDeviceAndSwapChain(
-            None,
+    let fac : IDXGIFactory = unsafe { CreateDXGIFactory()? };
+
+    let _dev = unsafe {
+        D3D11CreateDevice(None,
             D3D_DRIVER_TYPE_HARDWARE,
             HINSTANCE::default(),
             D3D11_CREATE_DEVICE_FLAG(0),
             &feature_levels,
             D3D11_SDK_VERSION,
-            &swapchain_desc,
-            &mut out_swapchain,
             &mut out_device,
-            &mut out_feature_level,
-            &mut out_context,
+            &mut _out_feature_level,
+            &mut _out_context
         )?
+    };
+    let device = out_device.ok_or( windows::core::Error::new(DXGI_ERROR_INVALID_CALL, HSTRING::default()))?;
+
+    let swap_chain : IDXGISwapChain = unsafe {
+        fac.CreateSwapChain(&device, &swapchain_desc)?
     };
 
     unsafe {
-        let swap_chain = out_swapchain.unwrap();
-        let device = out_device.unwrap();
         Ok(VTables {
             vtbl_dxgi_swapchain: Interface::vtable(&swap_chain),
             vtbl_d3d11_device: Interface::vtable(&device),

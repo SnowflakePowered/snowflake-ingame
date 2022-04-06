@@ -3,7 +3,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use dashmap::DashMap;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
-use windows::Win32::UI::WindowsAndMessaging::{CallWindowProcW, DefWindowProcW, GetWindowLongPtrW, GWLP_WNDPROC, SetWindowLongPtrW, WINDOW_LONG_PTR_INDEX, WNDPROC};
+use windows::Win32::UI::WindowsAndMessaging::{CallWindowProcW, DefWindowProcW,
+                                              GWLP_WNDPROC, SetWindowLongPtrW, WNDPROC};
 
 #[derive(Debug)]
 pub struct WndProcMsg {
@@ -50,9 +51,11 @@ impl WndProcHook {
             return Err(false);
         }
 
-        let old_wndproc = unsafe { SetWindowLongPtrW(hwnd, GWLP_WNDPROC,
-                                                     wndproc_shim as isize) };
+        let old_wndproc = SetWindowLongPtrW(hwnd, GWLP_WNDPROC,
+                                                     wndproc_shim as isize);
+
         WNDPROC_REGISTRY.insert(hwnd.0, WndProcRecord {
+            // todo: strict-provenance
             base: std::mem::transmute(old_wndproc),
             block: handle.block.clone(),
             send: handle.make_send()

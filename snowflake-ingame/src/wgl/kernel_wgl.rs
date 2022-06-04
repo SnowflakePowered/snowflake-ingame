@@ -112,9 +112,9 @@ impl WGLKernel {
         mut wndproc: RwLockWriteGuard<WndProcHandle>
     ) -> Result<RenderToken, RenderError>{
         // Handle update of any overlay here.
-        if let Ok(cmd) = handle.try_recv() {
-            match &cmd.ty {
-                &GameWindowCommandType::OVERLAY_TEXTURE => {
+        if let Ok(cmd) = &handle.try_recv() {
+            match cmd.ty {
+                GameWindowCommandType::OVERLAY_TEXTURE => {
                     eprintln!("[wgl] received overlay texture event");
                     overlay.refresh( unsafe { cmd.params.overlay_event })
                         .unwrap_or_else(|e| eprintln!("[wgl] handle error: {}", e));

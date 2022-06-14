@@ -1,14 +1,13 @@
 fn main() -> Result<(), Box<dyn Error>> {
-    use dll_syringe::{Process, Syringe};
+    use dll_syringe::{process::OwnedProcess, Syringe};
     use std::env::args;
 
     let _args: Vec<String> = args().collect();
     let child = Command::new("E:\\Emulators\\RetroArch\\retroarch.exe").spawn()?;
-    let target_process = Process::from_child(child);
-    let syringe = Syringe::new();
+    let target_process = OwnedProcess::from_child(child);
+    let syringe = Syringe::for_process(target_process);
 
     syringe.inject(
-        &target_process,
         "D:\\coding\\snowflake-ingame\\target\\debug\\snowflake_ingame.dll",
     )?;
     Ok(())

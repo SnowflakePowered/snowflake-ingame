@@ -91,5 +91,8 @@ pub enum RenderError {
     OverlayPaintNotReady(Box<RenderError>),
 
     #[error("The ImGui context could not be readied for paint. {0}")]
-    ImGuiNotReady(Box<RenderError>)
+    ImGuiNotReady(Box<RenderError>),
+
+    #[error("The kernel was not properly initialized.")]
+    KernelNotReady,
 }

@@ -8,8 +8,11 @@ use crate::ipc::IpcHandle;
 #[derive(Clone)]
 pub struct KernelContext {
     pub ipc: IpcHandle,
-    pub imgui: Arc<RwLock<imgui::Context>>
+    pub imgui: Arc<RwLock<imgui::Context>>,
 }
+unsafe impl Sync for KernelContext {}
+unsafe impl Send for KernelContext {}
+
 
 /// All hooks are driven by the FrameKernel at a frame-level granularity.
 pub trait FrameKernel where Self: Sized, Self::Handle: HookHandle {

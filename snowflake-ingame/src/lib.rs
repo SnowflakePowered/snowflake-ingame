@@ -6,11 +6,6 @@
 use std::error::Error;
 use std::ffi::c_void;
 use std::panic::catch_unwind;
-use std::sync::Arc;
-use imgui::Context;
-use parking_lot::RwLock;
-
-use uuid::Uuid;
 use windows::Win32::Foundation::{BOOL, HINSTANCE};
 use windows::Win32::System::Console::AllocConsole;
 use windows::Win32::System::SystemServices::DLL_PROCESS_ATTACH;
@@ -28,31 +23,21 @@ mod wgl;
 mod win32;
 mod common;
 mod kernel;
+mod vk;
 
 unsafe fn main() -> Result<(), Box<dyn Error>> {
-
-    let ipc = IpcConnectionBuilder::new(Uuid::nil());
-    let ipc = ipc.connect()?;
-
-    let handle = ipc.handle();
-
-    let imgui = Arc::new(RwLock::new(Context::create()));
-
-    let context = KernelContext {
-        imgui: imgui.clone(),
-        ipc: handle.clone()
-    };
-
+    let context = kernel::acquire()?;
     let mut dx11 = Direct3D11Kernel::new(context.clone())?;
     dx11.init()?;
     println!("[dx11] init finish");
 
-    let mut wgl = WGLKernel::new(context)?;
+    let mut wgl = WGLKernel::new(context.clone())?;
     wgl.init()?;
     println!("[wgl] init finish");
 
-    ipc.listen()?;
-    eprintln!("[ipc] ipc stop");
+    if !vk::entry::is_vk_loaded() {
+        kernel::start()?;
+    }
     Ok(())
 }
 

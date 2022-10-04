@@ -1,4 +1,4 @@
-use std::lazy::SyncLazy;
+use std::sync::LazyLock;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use dashmap::DashMap;
@@ -116,7 +116,7 @@ impl WndProcHandle {
     }
 }
 
-static WNDPROC_REGISTRY: SyncLazy<DashMap<isize, WndProcRecord>> = SyncLazy::new(|| DashMap::new());
+static WNDPROC_REGISTRY: LazyLock<DashMap<isize, WndProcRecord>> = LazyLock::new(|| DashMap::new());
 
 unsafe extern "system" fn wndproc_shim(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if let Some(wndproc) = WNDPROC_REGISTRY.get(&hwnd.0) {

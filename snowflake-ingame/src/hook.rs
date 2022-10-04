@@ -22,9 +22,9 @@ macro_rules! hook_define {
         }
 
         // Make chain
-        static $chain_name: std::lazy::SyncLazy<
+        static $chain_name: std::sync::LazyLock<
             std::sync::RwLock<indexmap::map::IndexMap<std::primitive::usize, $fn_hook>>,
-        > = std::lazy::SyncLazy::new(|| std::sync::RwLock::new(indexmap::map::IndexMap::new()));
+        > = std::sync::LazyLock::new(|| std::sync::RwLock::new(indexmap::map::IndexMap::new()));
 
         // Impl chain
         impl<'a> crate::hook::HookChain<'a, $fn_hook> for $context_name<'a> {

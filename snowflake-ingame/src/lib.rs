@@ -26,7 +26,9 @@ mod kernel;
 mod vk;
 
 unsafe fn main() -> Result<(), Box<dyn Error>> {
+    println!("[ingame] reached main");
     let context = kernel::acquire()?;
+    println!("[ingame] kernel acquired");
     let mut dx11 = Direct3D11Kernel::new(context.clone())?;
     dx11.init()?;
     println!("[dx11] init finish");

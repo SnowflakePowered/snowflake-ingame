@@ -1,5 +1,5 @@
 use std::error::Error;
-use std::lazy::SyncOnceCell;
+use std::sync::OnceLock;
 use std::sync::Arc;
 use imgui::Context;
 use parking_lot::RwLock;
@@ -8,8 +8,8 @@ use crate::{IpcConnectionBuilder, KernelContext};
 use crate::common::RenderError;
 use crate::ipc::IpcConnection;
 
-static KERNEL_CONTEXT: SyncOnceCell<KernelContext> = SyncOnceCell::new();
-static mut IPC_CONNECTION: SyncOnceCell<IpcConnection> = SyncOnceCell::new();
+static KERNEL_CONTEXT: OnceLock<KernelContext> = OnceLock::new();
+static mut IPC_CONNECTION: OnceLock<IpcConnection> = OnceLock::new();
 
 /// Acquire a handle to the global kernel.
 /// This will initialize the IPC connection and ImGui context

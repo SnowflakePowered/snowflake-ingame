@@ -13,7 +13,8 @@ static mut IPC_CONNECTION: OnceLock<IpcConnection> = OnceLock::new();
 
 /// Acquire a handle to the global kernel.
 /// This will initialize the IPC connection and ImGui context
-/// the first time it is called.
+/// the first time it is called. This function is safe to call multiple times,
+/// if and only if it is not called before `kernel::start`.
 ///
 /// SAFETY: Calling `kernel::acquire` after `kernel::start` is undefined behaviour.
 pub unsafe fn acquire() -> Result<&'static KernelContext, Box<dyn Error>> {

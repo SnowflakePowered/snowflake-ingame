@@ -57,6 +57,7 @@ pub extern "system" fn DllMain(
             AllocConsole();
         }
 
+        println!("[init] dllmain");
         std::thread::spawn(|| unsafe {
             println!(
                 "{:?}",
@@ -74,4 +75,52 @@ pub extern "system" fn DllMain(
         });
     }
     true.into()
+}
+
+use ash::vk::Result as VkResult;
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[repr(transparent)]
+#[must_use]
+pub struct VkLayerNegotiateStructType(pub(crate) i32);
+impl VkLayerNegotiateStructType {
+    pub const LAYER_NEGOTIATE_INTERFACE_STRUCT: Self = Self(1);
+}
+
+#[repr(C)]
+pub struct VkNegotiateLayerInterface {
+    pub s_type: VkLayerNegotiateStructType,
+    pub p_next: *const c_void,
+    pub loader_layer_interface_version: u32,
+    pub pfn_get_instance_proc_addr: ash::vk::PFN_vkGetInstanceProcAddr,
+    pub pfn_get_device_proc_addr:  ash::vk::PFN_vkGetDeviceProcAddr,
+
+    // typedef PFN_vkVoidFunction (VKAPI_PTR *PFN_GetPhysicalDeviceProcAddr)(VkInstance instance, const char* pName);
+    pub pfn_get_physical_device_proc_addr: Option<ash::vk::PFN_vkGetInstanceProcAddr>,
+}
+#[no_mangle]
+pub unsafe extern "system" fn vk_main(interface: *mut VkNegotiateLayerInterface) -> VkResult {
+    // unsafe { winapi::um::consoleapi::AllocConsole(); }
+    println!("[vk] layer version negotiate");
+    if (*interface).s_type != VkLayerNegotiateStructType::LAYER_NEGOTIATE_INTERFACE_STRUCT {
+        return VkResult::ERROR_INITIALIZATION_FAILED;
+    }
+
+    let target_ld = (*interface).loader_layer_interface_version;
+
+    if target_ld < 2 {
+        // We only support Layer Interface Version 2.
+        return VkResult::ERROR_INITIALIZATION_FAILED;
+    }
+
+    // Validate init params
+    // if target_ld >= vk_cfg.loader_version {
+    //     (*interface).loader_layer_interface_version = vk_cfg.loader_version;
+    //     (*interface).pfn_get_device_proc_addr = get_device_proc_addr;
+    //     (*interface).pfn_get_instance_proc_addr = get_instance_proc_addr;
+    // }
+    //
+    // (*interface).pfn_get_physical_device_proc_addr = None;
+
+    return VkResult::SUCCESS;
 }

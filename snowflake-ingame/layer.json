@@ -1,0 +1,17 @@
+{
+  "file_format_version": "1.2.0",
+  "layer": {
+    "name": "VK_LAYER_SNOWFLAKE_ingame",
+    "type": "GLOBAL",
+    "library_path": "D:\\coding\\snowflake-ingame\\target\\debug\\snowflake_ingame.dll",
+    "api_version": "1.3.224",
+    "implementation_version": "1",
+    "description": "Snowflake Ingame Runtime",
+    "functions": {
+      "vkNegotiateLoaderLayerInterfaceVersion": "vk_main"
+    },
+    "disable_environment": {
+      "DISABLE_SNOWFLAKE_INGAME_VULKAN": "1"
+    }
+  }
+}

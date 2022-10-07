@@ -68,10 +68,11 @@ pub struct IpcConnection {
     local_rx: crossbeam_channel::Receiver<GameWindowCommand>,
     remote_rx: tokio::sync::mpsc::UnboundedReceiver<GameWindowCommand>,
     local_tx: crossbeam_channel::Sender<GameWindowCommand>,
+    kill_rx: Option<tokio::sync::oneshot::Receiver<()>>
 }
 
 impl IpcConnectionBuilder {
-    pub fn connect(self) -> Result<IpcConnection, Box<dyn Error>> {
+    pub fn connect(self, mut kill_rx: Option<tokio::sync::oneshot::Receiver<()>>) -> Result<IpcConnection, Box<dyn Error>> {
         let pipe = self.ctx.block_on(async {
             let pipeid = &self.uuid;
             let mut pipe = connect(pipeid).await?;
@@ -107,6 +108,7 @@ impl IpcConnectionBuilder {
             local_tx: tx,
             remote_tx: client_tx,
             local_rx: client_rx,
+            kill_rx
         })
     }
 
@@ -136,9 +138,17 @@ impl IpcConnection {
 
         // No more handles can be created.
         drop(self.remote_tx);
+
+        let mut kill_rx = self.kill_rx;
+
         self.ctx
             .block_on(async move {
                 loop {
+                    if let Some(Ok(())) = kill_rx.as_mut().map(|r| r.try_recv()) {
+                        println!("[ipc] kill signal received");
+                        break Ok(());
+                    }
+
                     let ready = client
                         .ready(Interest::READABLE | Interest::WRITABLE)
                         .await?;
@@ -191,7 +201,7 @@ impl IpcConnection {
                 }
             })
             .unwrap();
-        eprintln!("loop done");
+        eprintln!("[ipc] listen loop complete");
         Ok(())
     }
 }

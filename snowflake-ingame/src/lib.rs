@@ -8,6 +8,7 @@ use std::ffi::c_void;
 use std::panic::catch_unwind;
 use windows::Win32::Foundation::{BOOL, HINSTANCE};
 use windows::Win32::System::Console::AllocConsole;
+use windows::Win32::System::LibraryLoader::DisableThreadLibraryCalls;
 use windows::Win32::System::SystemServices::DLL_PROCESS_ATTACH;
 
 use crate::d3d11::Direct3D11Kernel;
@@ -38,7 +39,10 @@ unsafe fn main() -> Result<(), Box<dyn Error>> {
     println!("[wgl] init finish");
 
     if !vk::entry::is_vk_loaded() {
+        println!("[init] starting kernel.");
         kernel::start()?;
+    } else {
+        println!("[vk] deferring kernel start to Vulkan.")
     }
     Ok(())
 }
@@ -46,21 +50,22 @@ unsafe fn main() -> Result<(), Box<dyn Error>> {
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "system" fn DllMain(
-    _module: HINSTANCE,
+    module: HINSTANCE,
     call_reason: u32,
     _reserved: *mut c_void,
 ) -> BOOL {
-    // unsafe { DisableThreadLibraryCalls(module); }
+    // disable DLL_THREAD_ATTACH
+    unsafe { DisableThreadLibraryCalls(module); }
 
     if call_reason == DLL_PROCESS_ATTACH {
         unsafe {
             AllocConsole();
         }
 
-        println!("[init] dllmain");
+        println!("[init] DllMain");
         std::thread::spawn(|| unsafe {
             println!(
-                "{:?}",
+                "[init] {:?}",
                 catch_unwind(|| {
                     match crate::main() {
                         Ok(()) => 0 as u32,
@@ -71,56 +76,8 @@ pub extern "system" fn DllMain(
                     }
                 })
             );
-            println!("over.");
+            println!("[init] DllMain over");
         });
     }
     true.into()
-}
-
-use ash::vk::Result as VkResult;
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-#[repr(transparent)]
-#[must_use]
-pub struct VkLayerNegotiateStructType(pub(crate) i32);
-impl VkLayerNegotiateStructType {
-    pub const LAYER_NEGOTIATE_INTERFACE_STRUCT: Self = Self(1);
-}
-
-#[repr(C)]
-pub struct VkNegotiateLayerInterface {
-    pub s_type: VkLayerNegotiateStructType,
-    pub p_next: *const c_void,
-    pub loader_layer_interface_version: u32,
-    pub pfn_get_instance_proc_addr: ash::vk::PFN_vkGetInstanceProcAddr,
-    pub pfn_get_device_proc_addr:  ash::vk::PFN_vkGetDeviceProcAddr,
-
-    // typedef PFN_vkVoidFunction (VKAPI_PTR *PFN_GetPhysicalDeviceProcAddr)(VkInstance instance, const char* pName);
-    pub pfn_get_physical_device_proc_addr: Option<ash::vk::PFN_vkGetInstanceProcAddr>,
-}
-#[no_mangle]
-pub unsafe extern "system" fn vk_main(interface: *mut VkNegotiateLayerInterface) -> VkResult {
-    // unsafe { winapi::um::consoleapi::AllocConsole(); }
-    println!("[vk] layer version negotiate");
-    if (*interface).s_type != VkLayerNegotiateStructType::LAYER_NEGOTIATE_INTERFACE_STRUCT {
-        return VkResult::ERROR_INITIALIZATION_FAILED;
-    }
-
-    let target_ld = (*interface).loader_layer_interface_version;
-
-    if target_ld < 2 {
-        // We only support Layer Interface Version 2.
-        return VkResult::ERROR_INITIALIZATION_FAILED;
-    }
-
-    // Validate init params
-    // if target_ld >= vk_cfg.loader_version {
-    //     (*interface).loader_layer_interface_version = vk_cfg.loader_version;
-    //     (*interface).pfn_get_device_proc_addr = get_device_proc_addr;
-    //     (*interface).pfn_get_instance_proc_addr = get_instance_proc_addr;
-    // }
-    //
-    // (*interface).pfn_get_physical_device_proc_addr = None;
-
-    return VkResult::SUCCESS;
 }

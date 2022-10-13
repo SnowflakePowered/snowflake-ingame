@@ -1,19 +1,5 @@
 use windows::core::{PCSTR, Result as HResult};
-use windows::Win32::Graphics::Direct3D11::{
-    D3D11_BIND_CONSTANT_BUFFER, D3D11_BIND_SHADER_RESOURCE, D3D11_BLEND_DESC, D3D11_BLEND_INV_SRC_ALPHA, D3D11_BLEND_OP_ADD,
-    D3D11_BLEND_SRC_ALPHA, D3D11_BLEND_ZERO, D3D11_BUFFER_DESC, D3D11_COLOR_WRITE_ENABLE_ALL,
-    D3D11_COMPARISON_ALWAYS, D3D11_CPU_ACCESS_WRITE,
-    D3D11_CULL_NONE, D3D11_DEPTH_STENCIL_DESC,
-    D3D11_DEPTH_STENCILOP_DESC, D3D11_DEPTH_WRITE_MASK_ALL, D3D11_FILL_SOLID, D3D11_FILTER_MIN_MAG_MIP_LINEAR,
-    D3D11_INPUT_ELEMENT_DESC, D3D11_INPUT_PER_VERTEX_DATA, D3D11_RASTERIZER_DESC,
-    D3D11_RENDER_TARGET_BLEND_DESC, D3D11_SAMPLER_DESC, D3D11_SHADER_RESOURCE_VIEW_DESC, D3D11_SHADER_RESOURCE_VIEW_DESC_0,
-    D3D11_STENCIL_OP_KEEP, D3D11_SUBRESOURCE_DATA, D3D11_TEX2D_SRV,
-    D3D11_TEXTURE2D_DESC, D3D11_TEXTURE_ADDRESS_WRAP, D3D11_USAGE_DEFAULT,
-    D3D11_USAGE_DYNAMIC, ID3D11BlendState, ID3D11Buffer,
-    ID3D11DepthStencilState, ID3D11Device, ID3D11InputLayout,
-    ID3D11PixelShader, ID3D11RasterizerState, ID3D11SamplerState, ID3D11ShaderResourceView,
-    ID3D11VertexShader,
-};
+use windows::Win32::Graphics::Direct3D11::{D3D11_BIND_CONSTANT_BUFFER, D3D11_BIND_SHADER_RESOURCE, D3D11_BLEND_DESC, D3D11_BLEND_INV_SRC_ALPHA, D3D11_BLEND_OP_ADD, D3D11_BLEND_SRC_ALPHA, D3D11_BLEND_ZERO, D3D11_BUFFER_DESC, D3D11_COLOR_WRITE_ENABLE_ALL, D3D11_COMPARISON_ALWAYS, D3D11_CPU_ACCESS_WRITE, D3D11_CULL_NONE, D3D11_DEPTH_STENCIL_DESC, D3D11_DEPTH_STENCILOP_DESC, D3D11_DEPTH_WRITE_MASK_ALL, D3D11_FILL_SOLID, D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_INPUT_ELEMENT_DESC, D3D11_INPUT_PER_VERTEX_DATA, D3D11_RASTERIZER_DESC, D3D11_RENDER_TARGET_BLEND_DESC, D3D11_RESOURCE_MISC_FLAG, D3D11_SAMPLER_DESC, D3D11_SHADER_RESOURCE_VIEW_DESC, D3D11_SHADER_RESOURCE_VIEW_DESC_0, D3D11_STENCIL_OP_KEEP, D3D11_SUBRESOURCE_DATA, D3D11_TEX2D_SRV, D3D11_TEXTURE2D_DESC, D3D11_TEXTURE_ADDRESS_WRAP, D3D11_USAGE_DEFAULT, D3D11_USAGE_DYNAMIC, ID3D11BlendState, ID3D11Buffer, ID3D11DepthStencilState, ID3D11Device, ID3D11InputLayout, ID3D11PixelShader, ID3D11RasterizerState, ID3D11SamplerState, ID3D11ShaderResourceView, ID3D11VertexShader};
 use windows::Win32::Graphics::Direct3D::D3D11_SRV_DIMENSION_TEXTURE2D;
 use windows::Win32::Graphics::Dxgi::Common::{
     DXGI_FORMAT_R32G32_FLOAT, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SAMPLE_DESC,
@@ -73,7 +59,7 @@ impl FontTexture {
             SysMemSlicePitch: 0,
         };
 
-        let font_tex = unsafe { device.CreateTexture2D(&tex_desc, &tex_sub_rsrc)? };
+        let font_tex = unsafe { device.CreateTexture2D(&tex_desc, Some(&tex_sub_rsrc))? };
 
         let srv_desc = D3D11_SHADER_RESOURCE_VIEW_DESC {
             Format: DXGI_FORMAT_R8G8B8A8_UNORM,
@@ -86,7 +72,7 @@ impl FontTexture {
             },
         };
 
-        let font_srv = unsafe { device.CreateShaderResourceView(&font_tex, &srv_desc)? };
+        let font_srv = unsafe { device.CreateShaderResourceView(&font_tex, Some(&srv_desc))? };
 
         let font_sampler_desc = D3D11_SAMPLER_DESC {
             Filter: D3D11_FILTER_MIN_MAG_MIP_LINEAR,
@@ -140,12 +126,12 @@ fn create_vertex_const_buffer(device: &ID3D11Device) -> HResult<ID3D11Buffer> {
     let buffer_desc = D3D11_BUFFER_DESC {
         ByteWidth: std::mem::size_of::<VertexConstantBuffer>() as u32,
         Usage: D3D11_USAGE_DYNAMIC,
-        BindFlags: D3D11_BIND_CONSTANT_BUFFER.0,
-        CPUAccessFlags: D3D11_CPU_ACCESS_WRITE.0,
-        MiscFlags: 0,
+        BindFlags: D3D11_BIND_CONSTANT_BUFFER,
+        CPUAccessFlags: D3D11_CPU_ACCESS_WRITE,
+        MiscFlags: D3D11_RESOURCE_MISC_FLAG(0),
         StructureByteStride: 0,
     };
-    unsafe { device.CreateBuffer(&buffer_desc, std::ptr::null()) }
+    unsafe { device.CreateBuffer(&buffer_desc, None) }
 }
 
 #[must_use]

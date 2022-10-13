@@ -1,10 +1,7 @@
 use std::marker::PhantomData;
 
 use windows::core::Result as HResult;
-use windows::Win32::Graphics::Direct3D11::{
-    ID3D11Buffer, ID3D11Device, D3D11_BIND_INDEX_BUFFER, D3D11_BIND_VERTEX_BUFFER,
-    D3D11_BUFFER_DESC, D3D11_CPU_ACCESS_WRITE, D3D11_USAGE_DYNAMIC,
-};
+use windows::Win32::Graphics::Direct3D11::{ID3D11Buffer, ID3D11Device, D3D11_BIND_INDEX_BUFFER, D3D11_BIND_VERTEX_BUFFER, D3D11_BUFFER_DESC, D3D11_CPU_ACCESS_WRITE, D3D11_USAGE_DYNAMIC, D3D11_RESOURCE_MISC_FLAG, D3D11_BIND_FLAG};
 
 const VERTEX_BUF_ADD_CAPACITY: usize = 5000;
 const INDEX_BUF_ADD_CAPACITY: usize = 10000;
@@ -52,12 +49,12 @@ impl<T, const ADD_CAPACITY: usize, const BIND_FLAGS: u32>
         let desc = D3D11_BUFFER_DESC {
             ByteWidth: (len * std::mem::size_of::<T>()) as u32,
             Usage: D3D11_USAGE_DYNAMIC,
-            BindFlags: BIND_FLAGS,
-            CPUAccessFlags: D3D11_CPU_ACCESS_WRITE.0,
-            MiscFlags: 0,
+            BindFlags: D3D11_BIND_FLAG(BIND_FLAGS),
+            CPUAccessFlags: D3D11_CPU_ACCESS_WRITE,
+            MiscFlags: D3D11_RESOURCE_MISC_FLAG(0),
             StructureByteStride: 0,
         };
-        let buffer = unsafe { device.CreateBuffer(&desc, std::ptr::null())? };
+        let buffer = unsafe { device.CreateBuffer(&desc, None)? };
         Ok((buffer, len))
     }
 }

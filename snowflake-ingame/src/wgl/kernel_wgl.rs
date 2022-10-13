@@ -38,7 +38,7 @@ impl Deref for OwnedGl {
 }
 
 unsafe fn create_wgl_loader() -> Result<impl Fn(&'static str) -> *const c_void, Box<dyn Error>> {
-    let opengl_instance = GetModuleHandleA(PCSTR(b"opengl32\0".as_ptr()));
+    let opengl_instance = GetModuleHandleA(PCSTR(b"opengl32\0".as_ptr()))?;
     if opengl_instance.is_invalid() {
         let error = GetLastError();
         return Err(windows::core::Error::new(HRESULT(error.0 as i32), HSTRING::new()).into());

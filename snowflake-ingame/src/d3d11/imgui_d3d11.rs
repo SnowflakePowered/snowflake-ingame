@@ -97,7 +97,7 @@ impl Direct3D11ImguiController {
                 self.rtv = Some(rtv)
             } else {
                 let back_buffer: ID3D11Texture2D = swapchain.GetBuffer(0)?;
-                let rtv = device.CreateRenderTargetView(back_buffer, None)?;
+                let rtv = device.CreateRenderTargetView(&back_buffer, None)?;
                 if let Some(context) = &context {
                     context.OMSetRenderTargets(Some(&[Some(rtv.clone())]), None);
                 }

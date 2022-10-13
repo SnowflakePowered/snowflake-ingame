@@ -12,7 +12,8 @@ pub enum HandleError {
 }
 
 pub fn try_duplicate_handle(source_pid: u32, handle: HANDLE) -> Result<HANDLE, HandleError> {
-    let process = unsafe { OpenProcess(PROCESS_DUP_HANDLE, false, source_pid) };
+    let process = unsafe { OpenProcess(PROCESS_DUP_HANDLE, false, source_pid)
+        .map_err(|_| HandleError::InvalidProcess)? };
     if process.is_invalid() {
         return Err(HandleError::InvalidProcess);
     }

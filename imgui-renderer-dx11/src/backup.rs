@@ -119,9 +119,9 @@ impl<'ctx> Drop for IABackup<'ctx> {
     fn drop(&mut self) {
         if let Some(context) = self._parent {
             unsafe {
-                context.IASetInputLayout(&self.input_layout);
+                context.IASetInputLayout(self.input_layout.as_ref());
                 context.IASetIndexBuffer(
-                    &self.index_buffer.0,
+                    self.index_buffer.0.as_ref(),
                     self.index_buffer.1,
                     self.index_buffer.2,
                 );
@@ -163,7 +163,7 @@ impl<'ctx> Drop for RSBackup<'ctx> {
     fn drop(&mut self) {
         if let Some(context) = self._parent {
             unsafe {
-                context.RSSetState(&self.rs_state);
+                context.RSSetState(self.rs_state.as_ref());
                 context.RSSetScissorRects(Some(&self.scissor_rects[..self.num_scissor_rects as usize]));
                 context.RSSetViewports(Some(&self.viewports[..self.num_viewports as usize]));
             }
@@ -198,17 +198,17 @@ impl<'ctx> Drop for OMBackup<'ctx> {
         if let Some(context) = self._parent {
             unsafe {
                 context.OMSetBlendState(
-                    &self.blend_state.0,
+                    self.blend_state.0.as_ref(),
                     Some(&self.blend_state.1),
                     self.blend_state.2,
                 );
-                context.OMSetDepthStencilState(&self.depth_stencil.0, self.depth_stencil.1);
+                context.OMSetDepthStencilState(self.depth_stencil.0.as_ref(), self.depth_stencil.1);
 
                 // yeah.. this is tough.
                 let uav_initial = [u32::MAX; D3D11_1_UAV_SLOT_COUNT as usize];
                 context.OMSetRenderTargetsAndUnorderedAccessViews(
                     Some(&self.render_target_views),
-                    &self.depth_stencil_view,
+                    self.depth_stencil_view.as_ref(),
                     0,
                     D3D11_1_UAV_SLOT_COUNT,
                     Some(self.unordered_access_views.as_ptr()),
@@ -276,7 +276,7 @@ macro_rules! make_shader_backup {
             fn drop(&mut self) {
                 if let Some(context) = self._parent {
                     unsafe {
-                        context.$set_shader(&self.shader_state, Some(&self.class_instances));
+                        context.$set_shader(self.shader_state.as_ref(), Some(&self.class_instances));
                         context.$set_samplers(0, Some(&self.sampler_states));
                         context.$set_shader_resources(0, Some(&self.resource_views));
                         context.$set_const_buffers(0, Some(&self.const_buffers));
@@ -402,7 +402,7 @@ impl<'ctx> Drop for CSBackup<'ctx> {
     fn drop(&mut self) {
         if let Some(context) = self._parent {
             unsafe {
-                context.CSSetShader(&self.shader_state, Some(&self.class_instances));
+                context.CSSetShader(self.shader_state.as_ref(), Some(&self.class_instances));
                 context.CSSetSamplers(0, Some(&self.sampler_states));
                 context.CSSetShaderResources(0, Some(&self.resource_views));
                 context.CSSetConstantBuffers(0, Some(&self.const_buffers));

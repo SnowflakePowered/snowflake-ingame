@@ -175,16 +175,16 @@ impl Renderer {
                 MaxDepth: 1.0,
             };
 
-            ctx.RSSetViewports(&[viewport]);
+            ctx.RSSetViewports(Some(&[viewport]));
 
             let stride = std::mem::size_of::<DrawVert>() as u32;
             ctx.IASetInputLayout(&device_objects.input_layout);
             ctx.IASetVertexBuffers(
                 0,
                 1,
-                &self.vertex_buffer.buffer().clone().into(),
-                &stride,
-                &0,
+                Some(&self.vertex_buffer.buffer().clone().into()),
+                Some(&stride),
+                Some(&0),
             );
             ctx.IASetIndexBuffer(
                 self.index_buffer.buffer(),
@@ -192,22 +192,22 @@ impl Renderer {
                 0,
             );
             ctx.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-            ctx.VSSetShader(&device_objects.vertex_shader, &[]);
-            ctx.VSSetConstantBuffers(0, &[device_objects.vertex_constant_buffer.clone().into()]);
-            ctx.PSSetShader(&device_objects.pixel_shader, &[]);
+            ctx.VSSetShader(&device_objects.vertex_shader, None);
+            ctx.VSSetConstantBuffers(0, Some(&[device_objects.vertex_constant_buffer.clone().into()]));
+            ctx.PSSetShader(&device_objects.pixel_shader, None);
 
             if let Some(font) = &self.font {
-                ctx.PSSetSamplers(0, &[font.font_sampler.clone().into()]);
+                ctx.PSSetSamplers(0, Some(&[font.font_sampler.clone().into()]));
             }
-            ctx.GSSetShader(None, &[]);
-            ctx.HSSetShader(None, &[]);
-            ctx.DSSetShader(None, &[]);
-            ctx.CSSetShader(None, &[]);
+            ctx.GSSetShader(None, None);
+            ctx.HSSetShader(None, None);
+            ctx.DSSetShader(None, None);
+            ctx.CSSetShader(None, None);
 
             let blend_factor = [0.0; 4];
             ctx.OMSetBlendState(
                 &device_objects.blend_state,
-                blend_factor.as_ptr(),
+                Some(blend_factor.as_ptr()),
                 0xFFFFFFFF,
             );
             ctx.OMSetDepthStencilState(&device_objects.depth_stencil_state, 0);
@@ -254,7 +254,7 @@ impl Renderer {
                         };
 
                         // Apply scissor/clipping rectangle
-                        self.context.RSSetScissorRects(&[rect]);
+                        self.context.RSSetScissorRects(Some(&[rect]));
 
                         // srv will be dropped after rendering.
 
@@ -272,7 +272,7 @@ impl Renderer {
 
                         // Bind texture, Draw
                         self.context
-                            .PSSetShaderResources(0, &[texture_srv.clone().into()]);
+                            .PSSetShaderResources(0, Some(&[texture_srv.clone().into()]));
                         self.context.DrawIndexed(
                             count as u32,
                             (cmd_params.idx_offset + index_offset) as u32,

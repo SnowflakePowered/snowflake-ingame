@@ -94,11 +94,11 @@ impl<'ctx> IABackup<'ctx> {
         let mut backup: Self = Default::default();
         backup._parent = Some(context);
 
-        context.IAGetInputLayout(&mut backup.input_layout);
+        context.IAGetInputLayout(Some(&mut backup.input_layout));
         context.IAGetIndexBuffer(
-            &mut backup.index_buffer.0,
-            &mut backup.index_buffer.1,
-            &mut backup.index_buffer.2,
+            Some(&mut backup.index_buffer.0),
+            Some(&mut backup.index_buffer.1),
+            Some(&mut backup.index_buffer.2),
         );
         context.IAGetPrimitiveTopology(&mut backup.primitive_topology);
 
@@ -106,9 +106,9 @@ impl<'ctx> IABackup<'ctx> {
         context.IAGetVertexBuffers(
             0,
             D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT,
-            backup.vertex_buffers.as_mut_ptr(),
-            backup.vertex_buffer_strides.as_mut_ptr(),
-            backup.vertex_buffer_offs.as_mut_ptr(),
+            Some(backup.vertex_buffers.as_mut_ptr()),
+            Some(backup.vertex_buffer_strides.as_mut_ptr()),
+            Some(backup.vertex_buffer_offs.as_mut_ptr()),
         );
 
         backup
@@ -129,9 +129,9 @@ impl<'ctx> Drop for IABackup<'ctx> {
                 context.IASetVertexBuffers(
                     0,
                     D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT,
-                    self.vertex_buffers.as_ptr(),
-                    self.vertex_buffer_strides.as_ptr(),
-                    self.vertex_buffer_offs.as_ptr(),
+                    Some(self.vertex_buffers.as_ptr()),
+                    Some(self.vertex_buffer_strides.as_ptr()),
+                    Some(self.vertex_buffer_offs.as_ptr()),
                 )
             }
         }
@@ -143,18 +143,18 @@ impl<'ctx> RSBackup<'ctx> {
         let mut backup: Self = Default::default();
         backup._parent = Some(context);
 
-        context.RSGetState(&mut backup.rs_state);
+        context.RSGetState(Some(&mut backup.rs_state));
 
         // input expects Option but really its not an option.
         // the transmute here is sus but what can we do about it?
         backup.num_scissor_rects = D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE;
         context.RSGetScissorRects(
             &mut backup.num_scissor_rects,
-            backup.scissor_rects.as_mut_ptr(),
+            Some(backup.scissor_rects.as_mut_ptr()),
         );
 
         backup.num_viewports = D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE;
-        context.RSGetViewports(&mut backup.num_viewports, backup.viewports.as_mut_ptr());
+        context.RSGetViewports(&mut backup.num_viewports, Some(backup.viewports.as_mut_ptr()));
         backup
     }
 }
@@ -164,8 +164,8 @@ impl<'ctx> Drop for RSBackup<'ctx> {
         if let Some(context) = self._parent {
             unsafe {
                 context.RSSetState(&self.rs_state);
-                context.RSSetScissorRects(&self.scissor_rects[..self.num_scissor_rects as usize]);
-                context.RSSetViewports(&self.viewports[..self.num_viewports as usize]);
+                context.RSSetScissorRects(Some(&self.scissor_rects[..self.num_scissor_rects as usize]));
+                context.RSSetViewports(Some(&self.viewports[..self.num_viewports as usize]));
             }
         }
     }
@@ -176,17 +176,17 @@ impl<'ctx> OMBackup<'ctx> {
         let mut backup: Self = Default::default();
         backup._parent = Some(context);
         context.OMGetBlendState(
-            &mut backup.blend_state.0,
-            &mut backup.blend_state.1,
-            &mut backup.blend_state.2,
+            Some(&mut backup.blend_state.0),
+            Some(&mut backup.blend_state.1),
+            Some(&mut backup.blend_state.2),
         );
         context
-            .OMGetDepthStencilState(&mut backup.depth_stencil.0, &mut backup.depth_stencil.1);
+            .OMGetDepthStencilState(Some(&mut backup.depth_stencil.0), Some(&mut backup.depth_stencil.1));
         context.OMGetRenderTargetsAndUnorderedAccessViews(
-            &mut backup.render_target_views,
-            &mut backup.depth_stencil_view,
+            Some(&mut backup.render_target_views),
+            Some(&mut backup.depth_stencil_view),
             0,
-            &mut backup.unordered_access_views,
+            Some(&mut backup.unordered_access_views),
         );
 
         backup
@@ -199,7 +199,7 @@ impl<'ctx> Drop for OMBackup<'ctx> {
             unsafe {
                 context.OMSetBlendState(
                     &self.blend_state.0,
-                    &self.blend_state.1,
+                    Some(&self.blend_state.1),
                     self.blend_state.2,
                 );
                 context.OMSetDepthStencilState(&self.depth_stencil.0, self.depth_stencil.1);
@@ -207,12 +207,12 @@ impl<'ctx> Drop for OMBackup<'ctx> {
                 // yeah.. this is tough.
                 let uav_initial = [u32::MAX; D3D11_1_UAV_SLOT_COUNT as usize];
                 context.OMSetRenderTargetsAndUnorderedAccessViews(
-                    &self.render_target_views,
+                    Some(&self.render_target_views),
                     &self.depth_stencil_view,
                     0,
                     D3D11_1_UAV_SLOT_COUNT,
-                    self.unordered_access_views.as_ptr(),
-                    uav_initial.as_ptr(),
+                    Some(self.unordered_access_views.as_ptr()),
+                    Some(uav_initial.as_ptr()),
                 );
             }
         }
@@ -261,13 +261,13 @@ macro_rules! make_shader_backup {
                 let mut backup: Self = Default::default();
                 backup.num_instances = D3D11_MAX_CLASS_INSTANCES as u32;
                 context.$get_shader(
-                    &mut backup.shader_state,
-                    backup.class_instances.as_mut_ptr(),
-                    &mut backup.num_instances,
+                    Some(&mut backup.shader_state),
+                    Some(backup.class_instances.as_mut_ptr()),
+                    Some(&mut backup.num_instances),
                 );
-                context.$get_samplers(0, &mut backup.sampler_states);
-                context.$get_shader_resources(0, &mut backup.resource_views);
-                context.$get_const_buffers(0, &mut backup.const_buffers);
+                context.$get_samplers(0, Some(&mut backup.sampler_states));
+                context.$get_shader_resources(0, Some(&mut backup.resource_views));
+                context.$get_const_buffers(0, Some(&mut backup.const_buffers));
                 backup
             }
         }
@@ -276,10 +276,10 @@ macro_rules! make_shader_backup {
             fn drop(&mut self) {
                 if let Some(context) = self._parent {
                     unsafe {
-                        context.$set_shader(&self.shader_state, &self.class_instances);
-                        context.$set_samplers(0, &self.sampler_states);
-                        context.$set_shader_resources(0, &self.resource_views);
-                        context.$set_const_buffers(0, &self.const_buffers);
+                        context.$set_shader(&self.shader_state, Some(&self.class_instances));
+                        context.$set_samplers(0, Some(&self.sampler_states));
+                        context.$set_shader_resources(0, Some(&self.resource_views));
+                        context.$set_const_buffers(0, Some(&self.const_buffers));
                     }
                 }
             }
@@ -386,14 +386,14 @@ impl<'ctx> CSBackup<'ctx> {
         let mut backup: Self = Default::default();
         backup.num_instances = D3D11_MAX_CLASS_INSTANCES as u32;
         context.CSGetShader(
-            &mut backup.shader_state,
-            backup.class_instances.as_mut_ptr(),
-            &mut backup.num_instances,
+            Some(&mut backup.shader_state),
+            Some(backup.class_instances.as_mut_ptr()),
+            Some(&mut backup.num_instances),
         );
-        context.CSGetSamplers(0, &mut backup.sampler_states);
-        context.CSGetShaderResources(0, &mut backup.resource_views);
-        context.CSGetConstantBuffers(0, &mut backup.const_buffers);
-        context.CSGetUnorderedAccessViews(0, &mut backup.unordered_access_views);
+        context.CSGetSamplers(0, Some(&mut backup.sampler_states));
+        context.CSGetShaderResources(0, Some(&mut backup.resource_views));
+        context.CSGetConstantBuffers(0, Some(&mut backup.const_buffers));
+        context.CSGetUnorderedAccessViews(0, Some(&mut backup.unordered_access_views));
         backup
     }
 }
@@ -402,17 +402,17 @@ impl<'ctx> Drop for CSBackup<'ctx> {
     fn drop(&mut self) {
         if let Some(context) = self._parent {
             unsafe {
-                context.CSSetShader(&self.shader_state, &self.class_instances);
-                context.CSSetSamplers(0, &self.sampler_states);
-                context.CSSetShaderResources(0, &self.resource_views);
-                context.CSSetConstantBuffers(0, &self.const_buffers);
+                context.CSSetShader(&self.shader_state, Some(&self.class_instances));
+                context.CSSetSamplers(0, Some(&self.sampler_states));
+                context.CSSetShaderResources(0, Some(&self.resource_views));
+                context.CSSetConstantBuffers(0, Some(&self.const_buffers));
                 let uav_initial = [u32::MAX; D3D11_1_UAV_SLOT_COUNT as usize];
 
                 context.CSSetUnorderedAccessViews(
                     0,
                     D3D11_1_UAV_SLOT_COUNT,
-                    self.unordered_access_views.as_ptr(),
-                    uav_initial.as_ptr(),
+                    Some(self.unordered_access_views.as_ptr()),
+                    Some(uav_initial.as_ptr()),
                 );
             }
         }

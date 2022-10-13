@@ -1,4 +1,4 @@
-use std::{env, fs, ptr, slice, str};
+use std::{env, fs, slice, str};
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 
@@ -21,14 +21,14 @@ fn main() -> Result<(), Box<dyn Error>> {
             VERTEX_SHADER.as_ptr().cast(),
             VERTEX_SHADER.len(),
             None,
-            ptr::null(),
+            None,
             None,
             PCSTR(b"main\0".as_ptr()),
             PCSTR(b"vs_4_0\0".as_ptr()),
             0,
             0,
             &mut vs_blob,
-            &mut err,
+            Some(&mut err),
         )?;
 
         check_shader_err(&err)?;
@@ -44,14 +44,14 @@ fn main() -> Result<(), Box<dyn Error>> {
             PIXEL_SHADER.as_ptr().cast(),
             PIXEL_SHADER.len(),
             None,
-            ptr::null(),
+            None,
             None,
             PCSTR(b"main\0".as_ptr()),
             PCSTR(b"ps_4_0\0".as_ptr()),
             0,
             0,
             &mut ps_blob,
-            &mut err,
+            Some(&mut err),
         )?;
 
         check_shader_err(&err)?;

@@ -122,7 +122,7 @@ impl Direct3D11Overlay {
             },
         };
 
-        let srv = unsafe { device.CreateShaderResourceView(&tex_2d, &srv_desc)? };
+        let srv = unsafe { device.CreateShaderResourceView(&tex_2d, Some(&srv_desc))? };
 
         self.keyed_mutex = Some(tex_mtx);
         self.texture = Some(tex_2d);

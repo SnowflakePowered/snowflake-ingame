@@ -43,7 +43,7 @@ fn get_window_class(class_name: *const u8) -> (WNDCLASSEXA, HWND) {
             None,
             None,
             window_class.hInstance,
-            std::ptr::null(),
+            None,
         );
 
         (window_class, hwnd)

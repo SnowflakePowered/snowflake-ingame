@@ -7,5 +7,5 @@ use ash::vk::{Handle, Result};
 pub fn is_vk_loaded() -> bool {
     let vk_instance =
         unsafe { GetModuleHandleA(PCSTR(b"vulkan-1\0".as_ptr())) };
-    return !vk_instance.is_invalid()
+    return !vk_instance.is_err()
 }

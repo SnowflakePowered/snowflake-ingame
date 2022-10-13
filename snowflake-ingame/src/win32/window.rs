@@ -24,7 +24,8 @@ fn get_window_class(class_name: *const u8) -> (WNDCLASSEXA, HWND) {
             cbSize: size_of::<WNDCLASSEXA>() as _,
             style: CS_HREDRAW | CS_VREDRAW,
             lpfnWndProc: Some(def_wnd_proc),
-            hInstance: GetModuleHandleA(None),
+            hInstance: GetModuleHandleA(None)
+                .expect("[w32] Could not get handle to current process."),
             lpszClassName: PCSTR(class_name),
             ..Default::default()
         };

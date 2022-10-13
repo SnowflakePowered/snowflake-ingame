@@ -1,7 +1,7 @@
 use std::error::Error;
 
 use detour::static_detour;
-use windows::core::{HSTRING, Interface};
+use windows::core::{HSTRING, Vtable};
 use windows::Win32::Foundation::{BOOL, HINSTANCE};
 use windows::Win32::Graphics::Direct3D::{
     D3D_DRIVER_TYPE_HARDWARE, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_11_1,
@@ -58,6 +58,7 @@ fn get_vtables() -> Result<VTables, Box<dyn Error>> {
     let mut _out_feature_level = D3D_FEATURE_LEVEL_11_0;
 
     let fac : IDXGIFactory = unsafe { CreateDXGIFactory()? };
+    eprintln!("[dx11] factory created");
 
     let _dev = unsafe {
         D3D11CreateDevice(None,
@@ -72,17 +73,19 @@ fn get_vtables() -> Result<VTables, Box<dyn Error>> {
         )?
     };
     let device = out_device.ok_or( windows::core::Error::new(DXGI_ERROR_INVALID_CALL, HSTRING::default()))?;
+    eprintln!("[dx11] device created");
 
     let swap_chain : IDXGISwapChain = unsafe {
         let mut swap_chain = None;
-        fac.CreateSwapChain(&device, &swapchain_desc, &mut swap_chain)?;
+        fac.CreateSwapChain(&device, &swapchain_desc, &mut swap_chain).ok()?;
         swap_chain.expect("[dx11] swapchain creation failed.")
     };
 
+    eprintln!("[dx11] swapchain acquired");
     unsafe {
         Ok(VTables {
-            vtbl_dxgi_swapchain: Interface::vtable(&swap_chain),
-            vtbl_d3d11_device: Interface::vtable(&device),
+            vtbl_dxgi_swapchain: swap_chain.vtable(),
+            vtbl_d3d11_device: device.vtable(),
         })
     }
 }

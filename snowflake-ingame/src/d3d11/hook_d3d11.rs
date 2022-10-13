@@ -64,17 +64,19 @@ fn get_vtables() -> Result<VTables, Box<dyn Error>> {
             D3D_DRIVER_TYPE_HARDWARE,
             HINSTANCE::default(),
             D3D11_CREATE_DEVICE_FLAG(0),
-            &feature_levels,
+            Some(&feature_levels),
             D3D11_SDK_VERSION,
-            &mut out_device,
-            &mut _out_feature_level,
-            &mut _out_context
+            Some(&mut out_device),
+            Some(&mut _out_feature_level),
+            Some(&mut _out_context)
         )?
     };
     let device = out_device.ok_or( windows::core::Error::new(DXGI_ERROR_INVALID_CALL, HSTRING::default()))?;
 
     let swap_chain : IDXGISwapChain = unsafe {
-        fac.CreateSwapChain(&device, &swapchain_desc)?
+        let mut swap_chain = None;
+        fac.CreateSwapChain(&device, &swapchain_desc, &mut swap_chain)?;
+        swap_chain.expect("[dx11] swapchain creation failed.")
     };
 
     unsafe {

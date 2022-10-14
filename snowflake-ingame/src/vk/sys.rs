@@ -3,9 +3,10 @@ use std::collections::HashMap;
 use std::ffi::{c_char, c_void, CStr};
 use std::sync::{OnceLock, RwLock};
 use ash::vk;
-use ash::vk::Result as VkResult;
+use ash::vk::{AllocationCallbacks, Result as VkResult, SwapchainCreateInfoKHR, SwapchainKHR};
 use windows::Win32::System::Console::AllocConsole;
-use crate::kernel;
+use crate::{HookChain, kernel};
+use crate::vk::hook_vk::VkHookContext;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 #[repr(transparent)]
@@ -65,6 +66,7 @@ pub struct InstanceDispatchTable {
 pub struct DeviceDispatchTable {
     pub get_device_proc_addr: vk::PFN_vkGetDeviceProcAddr,
     pub destroy_device: vk::PFN_vkDestroyDevice,
+    pub create_swapchain_khr: vk::PFN_vkCreateSwapchainKHR,
 }
 
 #[allow(clippy::type_complexity)]
@@ -72,13 +74,19 @@ static mut DEVICE: LazyCell<
     RwLock<HashMap<vk::Device, DeviceDispatchTable>>,
 > = LazyCell::new(Default::default);
 
+pub fn get_base_device_proc_addr(device: &vk::Device) -> Option<vk::PFN_vkGetDeviceProcAddr> {
+    unsafe {
+        DEVICE.read().ok()?.get(device).map(|d| d.get_device_proc_addr)
+    }
+}
+
 #[allow(clippy::type_complexity)]
 static mut INSTANCE: LazyCell<
     RwLock<HashMap<vk::Instance, InstanceDispatchTable>>,
 > = LazyCell::new(Default::default);
 
 #[no_mangle]
-pub unsafe extern "system" fn get_device_proc_addr(
+unsafe extern "system" fn get_device_proc_addr(
     device: vk::Device,
     p_name: *const std::os::raw::c_char,
 ) -> vk::PFN_vkVoidFunction {
@@ -87,6 +95,7 @@ pub unsafe extern "system" fn get_device_proc_addr(
         b"vkGetDeviceProcAddr" => Some(std::mem::transmute(get_device_proc_addr as vk::PFN_vkGetDeviceProcAddr)),
         b"vkCreateDevice" => Some(std::mem::transmute(create_device as vk::PFN_vkCreateDevice)),
         b"vkDestroyDevice" => Some(std::mem::transmute(destroy_device as vk::PFN_vkDestroyDevice)),
+        b"vkCreateSwapchainKHR" => Some(std::mem::transmute(create_swapchain as vk::PFN_vkCreateSwapchainKHR)),
         _ => DEVICE.read().ok()?.get(&device)
             .map(|dispatch| (dispatch.get_device_proc_addr)(device, p_name))
             .unwrap_or(None)
@@ -94,7 +103,7 @@ pub unsafe extern "system" fn get_device_proc_addr(
 }
 
 #[no_mangle]
-pub unsafe extern "system" fn get_instance_proc_addr(
+unsafe extern "system" fn get_instance_proc_addr(
     instance: vk::Instance,
     p_name: *const std::os::raw::c_char,
 ) -> vk::PFN_vkVoidFunction {
@@ -103,13 +112,29 @@ pub unsafe extern "system" fn get_instance_proc_addr(
         b"vkGetInstanceProcAddr" => Some(std::mem::transmute(get_instance_proc_addr as vk::PFN_vkGetInstanceProcAddr)),
         b"vkCreateInstance" => Some(std::mem::transmute(create_instance as vk::PFN_vkCreateInstance)),
         b"vkDestroyInstance" => Some(std::mem::transmute(destroy_instance as vk::PFN_vkDestroyInstance)),
-
         b"vkGetDeviceProcAddr" => Some(std::mem::transmute(get_device_proc_addr as vk::PFN_vkGetDeviceProcAddr)),
         b"vkCreateDevice" => Some(std::mem::transmute(create_device as vk::PFN_vkCreateDevice)),
         b"vkDestroyDevice" => Some(std::mem::transmute(destroy_device as vk::PFN_vkDestroyDevice)),
         _ => INSTANCE.read().ok()?.get(&instance)
             .map(|dispatch| (dispatch.get_instance_proc_addr)(instance, p_name))
             .unwrap_or(None)
+    }
+}
+
+unsafe extern "system" fn create_swapchain(
+    device: vk::Device,
+    create_info: *const SwapchainCreateInfoKHR,
+    allocator: *const AllocationCallbacks,
+    swapchain: *mut SwapchainKHR
+) -> vk::Result {
+    let base = DEVICE.read().expect("[vk] could not get hashmap").get(&device)
+        .map(|dispatch| dispatch.create_swapchain_khr);
+
+    match base {
+        Some(base) => {
+            VkHookContext::create_swapchain_khr(base, device, &*create_info, allocator.as_ref(), &mut *swapchain)
+        }
+        None => VkResult::ERROR_UNKNOWN
     }
 }
 
@@ -150,9 +175,11 @@ unsafe extern "system" fn create_device(
     let fp_create_device: vk::PFN_vkCreateDevice = std::mem::transmute(gipa(vk::Instance::null(), b"vkCreateDevice\0".as_ptr() as *const c_char));
     let result = fp_create_device(physical_device, p_create_info, p_allocator, p_device);
 
+    let chr = std::mem::transmute(gdpa(*p_device, b"vkCreateSwapchainKHR\0".as_ptr() as *const c_char));
     let dispatch = DeviceDispatchTable {
         get_device_proc_addr: gdpa,
-        destroy_device: std::mem::transmute(gdpa(*p_device, b"vkDestroyDevice\0".as_ptr() as *const c_char))
+        destroy_device: std::mem::transmute(gdpa(*p_device, b"vkDestroyDevice\0".as_ptr() as *const c_char)),
+        create_swapchain_khr: chr,
     };
 
     let result = (move || {
@@ -252,12 +279,14 @@ pub struct VkNegotiateLayerInterface {
     pub s_type: VkLayerNegotiateStructType,
     pub p_next: *const c_void,
     pub loader_layer_interface_version: u32,
-    pub pfn_get_instance_proc_addr: ash::vk::PFN_vkGetInstanceProcAddr,
-    pub pfn_get_device_proc_addr:  ash::vk::PFN_vkGetDeviceProcAddr,
+    pub pfn_get_instance_proc_addr: vk::PFN_vkGetInstanceProcAddr,
+    pub pfn_get_device_proc_addr:  vk::PFN_vkGetDeviceProcAddr,
 
     // typedef PFN_vkVoidFunction (VKAPI_PTR *PFN_GetPhysicalDeviceProcAddr)(VkInstance instance, const char* pName);
     pub pfn_get_physical_device_proc_addr: Option<ash::vk::PFN_vkGetInstanceProcAddr>,
 }
+
+use crate::hook::HookHandle;
 
 #[no_mangle]
 pub unsafe extern "system" fn vk_main(interface: *mut VkNegotiateLayerInterface) -> VkResult {
@@ -281,6 +310,11 @@ pub unsafe extern "system" fn vk_main(interface: *mut VkNegotiateLayerInterface)
     }
 
     (*interface).pfn_get_physical_device_proc_addr = None;
-
+    VkHookContext::init().expect("todo panic init")
+        .new(Box::new(move |device, create_info, all, s, mut next| {
+            eprintln!("{:?}", *create_info);
+            let fp = next.fp_next();
+            fp(device, create_info, all, s, next)
+        })).expect("TODO: panic message").persist();
     return VkResult::SUCCESS;
 }

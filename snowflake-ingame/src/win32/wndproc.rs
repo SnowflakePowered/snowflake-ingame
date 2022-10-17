@@ -1,28 +1,35 @@
-use std::sync::LazyLock;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use dashmap::DashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::sync::LazyLock;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
-use windows::Win32::UI::WindowsAndMessaging::{CallWindowProcW, DefWindowProcW,
-                                              GWLP_WNDPROC, SetWindowLongPtrW, WNDPROC};
+use windows::Win32::UI::WindowsAndMessaging::{
+    CallWindowProcW, DefWindowProcW, SetWindowLongPtrW, GWLP_WNDPROC, WNDPROC,
+};
 
 #[derive(Debug)]
 pub struct WndProcMsg {
     pub hwnd: HWND,
     pub msg: u32,
     pub wparam: WPARAM,
-    pub lparam: LPARAM
+    pub lparam: LPARAM,
 }
 
 pub struct WndProcRecord {
     base: WNDPROC,
     block: Arc<AtomicBool>,
-    send: crossbeam_channel::Sender<WndProcMsg>
+    send: crossbeam_channel::Sender<WndProcMsg>,
 }
 
 impl WndProcRecord {
     pub unsafe fn call(&self, hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-        self.send.try_send(WndProcMsg { hwnd, msg, wparam, lparam })
+        self.send
+            .try_send(WndProcMsg {
+                hwnd,
+                msg,
+                wparam,
+                lparam,
+            })
             .unwrap_or_default();
         if self.block.load(Ordering::SeqCst) {
             DefWindowProcW(hwnd, msg, wparam, lparam)
@@ -36,12 +43,12 @@ pub struct WndProcHandle {
     block: Arc<AtomicBool>,
     recv: crossbeam_channel::Receiver<WndProcMsg>,
     send: crossbeam_channel::Sender<WndProcMsg>,
-    current: WndProcHook
+    current: WndProcHook,
 }
 
 #[repr(transparent)]
 pub struct WndProcHook {
-    hwnd: HWND
+    hwnd: HWND,
 }
 
 impl WndProcHook {
@@ -51,19 +58,19 @@ impl WndProcHook {
             return Err(false);
         }
 
-        let old_wndproc = SetWindowLongPtrW(hwnd, GWLP_WNDPROC,
-                                                     wndproc_shim as isize);
+        let old_wndproc = SetWindowLongPtrW(hwnd, GWLP_WNDPROC, wndproc_shim as isize);
 
-        WNDPROC_REGISTRY.insert(hwnd.0, WndProcRecord {
-            // todo: strict-provenance
-            base: std::mem::transmute(old_wndproc),
-            block: handle.block.clone(),
-            send: handle.make_send()
-        });
+        WNDPROC_REGISTRY.insert(
+            hwnd.0,
+            WndProcRecord {
+                // todo: strict-provenance
+                base: std::mem::transmute(old_wndproc),
+                block: handle.block.clone(),
+                send: handle.make_send(),
+            },
+        );
 
-        Ok(WndProcHook {
-            hwnd
-        })
+        Ok(WndProcHook { hwnd })
     }
 }
 
@@ -81,7 +88,7 @@ impl WndProcHandle {
             block: Arc::new(AtomicBool::new(false)),
             recv,
             send,
-            current: WndProcHook { hwnd: HWND(0) }
+            current: WndProcHook { hwnd: HWND(0) },
         }
     }
 
@@ -118,11 +125,15 @@ impl WndProcHandle {
 
 static WNDPROC_REGISTRY: LazyLock<DashMap<isize, WndProcRecord>> = LazyLock::new(|| DashMap::new());
 
-unsafe extern "system" fn wndproc_shim(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+unsafe extern "system" fn wndproc_shim(
+    hwnd: HWND,
+    msg: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
     if let Some(wndproc) = WNDPROC_REGISTRY.get(&hwnd.0) {
         wndproc.call(hwnd, msg, wparam, lparam)
     } else {
-       DefWindowProcW(hwnd, msg, wparam, lparam)
+        DefWindowProcW(hwnd, msg, wparam, lparam)
     }
 }
-

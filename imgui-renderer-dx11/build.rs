@@ -1,6 +1,6 @@
-use std::{env, fs, slice, str};
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
+use std::{env, fs, slice, str};
 
 use windows::core::PCSTR;
 use windows::Win32::Graphics::Direct3D::Fxc::D3DCompile;

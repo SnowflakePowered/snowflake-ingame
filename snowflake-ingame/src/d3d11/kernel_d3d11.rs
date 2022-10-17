@@ -1,21 +1,19 @@
+use imgui_renderer_dx11::RenderToken;
+use parking_lot::{RwLock, RwLockWriteGuard};
 use std::error::Error;
 use std::mem::ManuallyDrop;
 use std::sync::Arc;
-use parking_lot::{RwLock, RwLockWriteGuard};
-use windows::Win32::Graphics::Direct3D11::{
-    D3D11_TEXTURE2D_DESC, ID3D11Device1, ID3D11Texture2D,
-};
+use windows::Win32::Graphics::Direct3D11::{ID3D11Device1, ID3D11Texture2D, D3D11_TEXTURE2D_DESC};
 use windows::Win32::Graphics::Dxgi::*;
-use imgui_renderer_dx11::RenderToken;
 
 use crate::common::{OverlayWindow, RenderError};
 use crate::d3d11::hook::{Direct3D11HookContext, FnPresentHook, FnResizeBuffersHook};
 use crate::d3d11::imgui::Direct3D11ImguiController;
 use crate::d3d11::overlay::Direct3D11Overlay;
-use crate::{FrameKernel, KernelContext};
 use crate::hook::{HookChain, HookHandle};
 use crate::ipc::cmd::{GameWindowCommand, GameWindowCommandType};
 use crate::ipc::IpcHandle;
+use crate::{FrameKernel, KernelContext};
 
 /// Kernel for a D3D11 hook.
 ///
@@ -44,7 +42,8 @@ impl FrameKernel for Direct3D11Kernel {
 
     fn init(&mut self) -> Result<ManuallyDrop<Self::Handle>, Box<dyn Error>> {
         println!("[dx11] init");
-        let handle = self.hook
+        let handle = self
+            .hook
             .new(self.make_present(), self.make_resize())?
             .persist();
         Ok(handle)
@@ -63,7 +62,8 @@ impl Direct3D11Kernel {
             match cmd.ty {
                 GameWindowCommandType::OVERLAY_TEXTURE => {
                     eprintln!("[dx11] received overlay texture event");
-                    overlay.refresh( unsafe { cmd.params.overlay_event })
+                    overlay
+                        .refresh(unsafe { cmd.params.overlay_event })
                         .unwrap_or_else(|e| eprintln!("[dx11] handle error: {}", e));
                 }
                 _ => {}
@@ -73,28 +73,32 @@ impl Direct3D11Kernel {
         let swapchain_desc = unsafe { this.GetDesc()? };
         let backbuffer = unsafe { this.GetBuffer::<ID3D11Texture2D>(0)? };
 
-        let backbuffer_desc: D3D11_TEXTURE2D_DESC  = unsafe {
+        let backbuffer_desc: D3D11_TEXTURE2D_DESC = unsafe {
             let mut backbuffer_desc = Default::default();
             backbuffer.GetDesc(&mut backbuffer_desc);
             backbuffer_desc
         };
 
-
         let size = backbuffer_desc.into();
         if !overlay.size_matches_viewpoint(&size) {
-            handle.send(GameWindowCommand::window_resize(&size, !overlay.ready_to_initialize()))?;
+            handle.send(GameWindowCommand::window_resize(
+                &size,
+                !overlay.ready_to_initialize(),
+            ))?;
         }
 
         if !overlay.ready_to_initialize() {
-            return Err(RenderError::OverlayHandleNotReady)
+            return Err(RenderError::OverlayHandleNotReady);
         }
 
         let device = unsafe { this.GetDevice::<ID3D11Device1>()? };
 
-        overlay.prepare_paint(device, swapchain_desc.OutputWindow)
+        overlay
+            .prepare_paint(device, swapchain_desc.OutputWindow)
             .map_err(|e| RenderError::OverlayPaintNotReady(Box::new(e)))?;
 
-        imgui.prepare_paint(&this, size)
+        imgui
+            .prepare_paint(&this, size)
             .map_err(|e| RenderError::ImGuiNotReady(Box::new(e)))?;
 
         // imgui stuff here.
@@ -103,7 +107,7 @@ impl Direct3D11Kernel {
         if let Some(_kmt) = overlay.acquire_sync() {
             imgui.frame(&mut overlay, |ctx, render, overlay| {
                 let ui = ctx.frame();
-                overlay.paint(|tid, dim|  OverlayWindow::new(&ui, tid, dim));
+                overlay.paint(|tid, dim| OverlayWindow::new(&ui, tid, dim));
                 ui.show_demo_window(&mut false);
                 ui.show_metrics_window(&mut false);
                 render.render(ui.render())
@@ -124,8 +128,7 @@ impl Direct3D11Kernel {
         Box::new(
             move |this: IDXGISwapChain, sync: u32, flags: u32, mut next| {
                 let handle = handle.clone();
-                match Direct3D11Kernel::present_impl(handle, overlay.write(),
-                                               imgui.write(), &this)
+                match Direct3D11Kernel::present_impl(handle, overlay.write(), imgui.write(), &this)
                 {
                     Ok(_) => {}
                     Err(e) => {

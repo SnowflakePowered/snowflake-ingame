@@ -1,13 +1,13 @@
-use std::error::Error;
-use std::sync::OnceLock;
-use std::sync::Arc;
-use imgui::Context;
-use parking_lot::RwLock;
-use uuid::Uuid;
-use crate::{IpcConnectionBuilder, KernelContext};
 use crate::common::RenderError;
 use crate::ipc::IpcConnection;
+use crate::{IpcConnectionBuilder, KernelContext};
+use imgui::Context;
+use parking_lot::RwLock;
+use std::error::Error;
+use std::sync::Arc;
+use std::sync::OnceLock;
 use tokio::sync::oneshot::*;
+use uuid::Uuid;
 
 static mut KERNEL_CONTEXT: OnceLock<KernelContext> = OnceLock::new();
 static mut IPC_CONNECTION: OnceLock<IpcConnection> = OnceLock::new();
@@ -23,7 +23,7 @@ static mut IMGUI_CONTEXT: OnceLock<Arc<RwLock<Context>>> = OnceLock::new();
 pub unsafe fn acquire() -> Result<&'static KernelContext, Box<dyn Error>> {
     if let Some(context) = KERNEL_CONTEXT.get() {
         println!("[krnl] reusing existing context");
-        return Ok(context)
+        return Ok(context);
     }
 
     println!("[krnl] initializing IPC connnection");
@@ -45,7 +45,7 @@ pub unsafe fn acquire() -> Result<&'static KernelContext, Box<dyn Error>> {
         let handle = ipc.handle();
         KernelContext {
             imgui: imgui.clone(),
-            ipc: handle.clone()
+            ipc: handle.clone(),
         }
     });
 
@@ -60,7 +60,8 @@ pub unsafe fn acquire() -> Result<&'static KernelContext, Box<dyn Error>> {
 pub fn kill() {
     unsafe {
         if let Some(handle) = KILL_HANDLE.take() {
-            handle.send(())
+            handle
+                .send(())
                 .expect("Could not send kill signal to receiving thread.");
         }
 
@@ -77,7 +78,7 @@ pub fn start() -> Result<(), Box<dyn Error>> {
     eprintln!("[krnl] starting main ipc loop");
     if unsafe { IPC_CONNECTION.get() }.is_none() {
         eprintln!("[krnl] ipc already consumed.");
-        return Ok(())
+        return Ok(());
     }
     let ipc = unsafe { IPC_CONNECTION.take().ok_or(RenderError::KernelNotReady)? };
     ipc.listen()?;

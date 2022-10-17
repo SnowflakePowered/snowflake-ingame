@@ -1,13 +1,15 @@
 use imgui::internal::RawWrapper;
 use imgui::{DrawCmd, DrawData, DrawIdx, DrawVert};
-use windows::core::{Result as HResult};
+use windows::core::Result as HResult;
 use windows::Win32::Foundation::RECT;
 use windows::Win32::Graphics::Direct3D::D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 use windows::Win32::Graphics::Direct3D11::{
     ID3D11Device, ID3D11DeviceContext, ID3D11ShaderResourceView, D3D11_MAP_WRITE_DISCARD,
     D3D11_VIEWPORT,
 };
-use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT, DXGI_FORMAT_R16_UINT, DXGI_FORMAT_R32_UINT};
+use windows::Win32::Graphics::Dxgi::Common::{
+    DXGI_FORMAT, DXGI_FORMAT_R16_UINT, DXGI_FORMAT_R32_UINT,
+};
 
 use crate::backup::StateBackup;
 use crate::buffers::{IndexBuffer, VertexBuffer};
@@ -40,7 +42,7 @@ impl Renderer {
         )));
     }
 
-    pub fn new(device: &ID3D11Device, imgui: &mut imgui::Context) ->  Result<Self, RenderError> {
+    pub fn new(device: &ID3D11Device, imgui: &mut imgui::Context) -> Result<Self, RenderError> {
         let device = device.clone();
         let mut context = None;
         unsafe { device.GetImmediateContext(&mut context) };
@@ -186,14 +188,13 @@ impl Renderer {
                 Some(&stride),
                 Some(&0),
             );
-            ctx.IASetIndexBuffer(
-                self.index_buffer.buffer(),
-                IDX_FORMAT,
-                0,
-            );
+            ctx.IASetIndexBuffer(self.index_buffer.buffer(), IDX_FORMAT, 0);
             ctx.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
             ctx.VSSetShader(&device_objects.vertex_shader, None);
-            ctx.VSSetConstantBuffers(0, Some(&[device_objects.vertex_constant_buffer.clone().into()]));
+            ctx.VSSetConstantBuffers(
+                0,
+                Some(&[device_objects.vertex_constant_buffer.clone().into()]),
+            );
             ctx.PSSetShader(&device_objects.pixel_shader, None);
 
             if let Some(font) = &self.font {
@@ -233,14 +234,8 @@ impl Renderer {
                         let [off_x, off_y] = clip_off;
                         let [scale_x, scale_y] = clip_scale;
 
-                        let clip_min = (
-                            clip_x - off_x,
-                            clip_y - off_y,
-                        );
-                        let clip_max = (
-                            clip_z - off_x,
-                            clip_w - off_y,
-                        );
+                        let clip_min = (clip_x - off_x, clip_y - off_y);
+                        let clip_max = (clip_z - off_x, clip_w - off_y);
 
                         if clip_max.0 <= clip_min.0 || clip_max.1 <= clip_min.1 {
                             continue;
@@ -259,15 +254,19 @@ impl Renderer {
                         // srv will be dropped after rendering.
 
                         #[cfg(not(feature = "strict-provenance"))]
-                        let texture_srv: ID3D11ShaderResourceView = std::mem::transmute(cmd_params.texture_id.id());
+                        let texture_srv: ID3D11ShaderResourceView =
+                            std::mem::transmute(cmd_params.texture_id.id());
 
                         // 'Preserve' provenance of texids.
                         // doesn't really actually do anything, but semantically expresses the correct
                         // intent.
                         #[cfg(feature = "strict-provenance")]
                         let texture_srv: ID3D11ShaderResourceView = {
-                            std::mem::transmute(std::ptr::from_exposed_addr_mut::<*mut core::ffi::c_void>
-                                (cmd_params.texture_id.id()))
+                            std::mem::transmute(std::ptr::from_exposed_addr_mut::<
+                                *mut core::ffi::c_void,
+                            >(
+                                cmd_params.texture_id.id()
+                            ))
                         };
 
                         // Bind texture, Draw

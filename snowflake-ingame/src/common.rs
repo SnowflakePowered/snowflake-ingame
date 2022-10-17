@@ -1,7 +1,7 @@
+use crate::ipc::cmd::GameWindowCommand;
 use imgui::{Condition, Image, StyleVar, TextureId, Ui, Window, WindowFlags};
 use windows::Win32::Foundation::HANDLE;
 use windows::Win32::Graphics::Direct3D11::D3D11_TEXTURE2D_DESC;
-use crate::ipc::cmd::GameWindowCommand;
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub struct Dimensions {
@@ -19,7 +19,7 @@ impl From<[f32; 2]> for Dimensions {
     fn from(item: [f32; 2]) -> Self {
         Dimensions {
             width: item[0] as u32,
-            height: item[1] as u32
+            height: item[1] as u32,
         }
     }
 }
@@ -34,7 +34,7 @@ impl From<D3D11_TEXTURE2D_DESC> for Dimensions {
     fn from(item: D3D11_TEXTURE2D_DESC) -> Self {
         Dimensions {
             width: item.Width,
-            height: item.Height
+            height: item.Height,
         }
     }
 }
@@ -55,9 +55,8 @@ impl OverlayWindow {
                     | WindowFlags::NO_BACKGROUND,
             )
             .no_decoration()
-            .build(ui, || {
-                Image::new(tid, dim.into()).build(ui)
-            }).unwrap_or(())
+            .build(ui, || Image::new(tid, dim.into()).build(ui))
+            .unwrap_or(())
     }
 }
 

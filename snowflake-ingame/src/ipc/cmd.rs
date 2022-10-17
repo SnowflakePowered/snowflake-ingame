@@ -1,7 +1,7 @@
+use crate::common::Dimensions;
 use std::fmt::{Debug, Formatter};
 use std::io::ErrorKind;
 use uuid::Uuid;
-use crate::common::Dimensions;
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 #[repr(transparent)]
@@ -144,7 +144,7 @@ impl GameWindowCommand {
                 resize_event: WindowResizeEventParams {
                     height: size.height as i32,
                     width: size.width as i32,
-                    force: force as u8
+                    force: force as u8,
                 },
             },
         }

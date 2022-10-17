@@ -68,11 +68,14 @@ pub struct IpcConnection {
     local_rx: crossbeam_channel::Receiver<GameWindowCommand>,
     remote_rx: tokio::sync::mpsc::UnboundedReceiver<GameWindowCommand>,
     local_tx: crossbeam_channel::Sender<GameWindowCommand>,
-    kill_rx: Option<tokio::sync::oneshot::Receiver<()>>
+    kill_rx: Option<tokio::sync::oneshot::Receiver<()>>,
 }
 
 impl IpcConnectionBuilder {
-    pub fn connect(self, mut kill_rx: Option<tokio::sync::oneshot::Receiver<()>>) -> Result<IpcConnection, Box<dyn Error>> {
+    pub fn connect(
+        self,
+        mut kill_rx: Option<tokio::sync::oneshot::Receiver<()>>,
+    ) -> Result<IpcConnection, Box<dyn Error>> {
         let pipe = self.ctx.block_on(async {
             let pipeid = &self.uuid;
             let mut pipe = connect(pipeid).await?;
@@ -108,7 +111,7 @@ impl IpcConnectionBuilder {
             local_tx: tx,
             remote_tx: client_tx,
             local_rx: client_rx,
-            kill_rx
+            kill_rx,
         })
     }
 
@@ -211,8 +214,7 @@ impl IpcHandle {
         &self,
         cmd: GameWindowCommand,
     ) -> Result<(), Box<tokio::sync::mpsc::error::SendError<GameWindowCommand>>> {
-        self.sender.send(cmd)
-            .map_err(|e| Box::new(e))
+        self.sender.send(cmd).map_err(|e| Box::new(e))
     }
 
     #[allow(dead_code)]

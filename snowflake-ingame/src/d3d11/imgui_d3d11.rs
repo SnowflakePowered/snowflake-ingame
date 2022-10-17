@@ -1,14 +1,14 @@
-use std::ptr;
-use std::sync::Arc;
-use imgui::{Context, DrawData};
-use parking_lot::RwLock;
-use windows::Win32::Foundation::HWND;
-use windows::Win32::Graphics::Direct3D11::{ID3D11Device, ID3D11RenderTargetView, ID3D11Texture2D};
-use windows::Win32::Graphics::Dxgi::{DXGI_SWAP_CHAIN_DESC, IDXGISwapChain};
-use imgui_renderer_dx11::{Direct3D11ImguiRenderer, RenderToken};
 use crate::common::{Dimensions, RenderError};
 use crate::d3d11::overlay_d3d11::Direct3D11Overlay;
+use imgui::{Context, DrawData};
+use imgui_renderer_dx11::{Direct3D11ImguiRenderer, RenderToken};
+use parking_lot::RwLock;
+use std::ptr;
+use std::sync::Arc;
 use windows::core::Result as HResult;
+use windows::Win32::Foundation::HWND;
+use windows::Win32::Graphics::Direct3D11::{ID3D11Device, ID3D11RenderTargetView, ID3D11Texture2D};
+use windows::Win32::Graphics::Dxgi::{IDXGISwapChain, DXGI_SWAP_CHAIN_DESC};
 
 pub(in crate::d3d11) struct Render<'a> {
     render: Option<&'a mut Direct3D11ImguiRenderer>,
@@ -51,7 +51,10 @@ impl Direct3D11ImguiController {
         self.rtv.is_some()
     }
 
-    pub fn frame<'a, F: FnOnce(&mut Context, Render, &mut Direct3D11Overlay) -> Result<RenderToken, RenderError>>(
+    pub fn frame<
+        'a,
+        F: FnOnce(&mut Context, Render, &mut Direct3D11Overlay) -> Result<RenderToken, RenderError>,
+    >(
         &mut self,
         overlay: &mut Direct3D11Overlay,
         f: F,
@@ -63,10 +66,17 @@ impl Direct3D11ImguiController {
         f(&mut self.imgui.write(), renderer, overlay)
     }
 
-    fn init_renderer(&mut self, swapchain: &IDXGISwapChain, window: HWND) -> Result<(), RenderError>{
+    fn init_renderer(
+        &mut self,
+        swapchain: &IDXGISwapChain,
+        window: HWND,
+    ) -> Result<(), RenderError> {
         let device = unsafe { swapchain.GetDevice()? };
         // Renderer owns its device.
-        self.renderer = Some(Direct3D11ImguiRenderer::new(&device, &mut self.imgui.write())?);
+        self.renderer = Some(Direct3D11ImguiRenderer::new(
+            &device,
+            &mut self.imgui.write(),
+        )?);
         self.window = window;
         Ok(())
     }
@@ -108,7 +118,11 @@ impl Direct3D11ImguiController {
     }
 
     #[must_use]
-    pub fn prepare_paint(&mut self, swapchain: &IDXGISwapChain, screen_dim: Dimensions) -> Result<(), RenderError> {
+    pub fn prepare_paint(
+        &mut self,
+        swapchain: &IDXGISwapChain,
+        screen_dim: Dimensions,
+    ) -> Result<(), RenderError> {
         let swap_desc: DXGI_SWAP_CHAIN_DESC = unsafe { swapchain.GetDesc()? };
 
         if swap_desc.OutputWindow != self.window {

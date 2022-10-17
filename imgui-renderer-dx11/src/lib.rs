@@ -26,26 +26,25 @@ impl ImguiTexture for ID3D11ShaderResourceView {
     fn as_tex_id(&self) -> TextureId {
         static_assertions::assert_eq_size!(ID3D11ShaderResourceView, usize);
         let srv = self.clone();
-        unsafe {
-            TextureId::from(std::mem::transmute::<_, usize>(srv))
-        }
+        unsafe { TextureId::from(std::mem::transmute::<_, usize>(srv)) }
     }
 }
 
 #[cfg(feature = "strict-provenance")]
 impl ImguiTexture for ID3D11ShaderResourceView {
     fn as_tex_id(&self) -> TextureId {
-        static_assertions::assert_eq_size!(ID3D11ShaderResourceView,
-            core::ptr::NonNull<core::ffi::c_void>);
+        static_assertions::assert_eq_size!(
+            ID3D11ShaderResourceView,
+            core::ptr::NonNull<core::ffi::c_void>
+        );
 
         let srv = self.clone();
 
         // SAFETY: repr(transparent)
-        let ptr =  unsafe { std::mem::transmute::<_, core::ptr::NonNull<core::ffi::c_void>>(srv) };
+        let ptr = unsafe { std::mem::transmute::<_, core::ptr::NonNull<core::ffi::c_void>>(srv) };
         TextureId::from(ptr.as_ptr().expose_addr())
     }
 }
 
-
-pub use renderer::Renderer as Direct3D11ImguiRenderer;
 pub use renderer::RenderToken;
+pub use renderer::Renderer as Direct3D11ImguiRenderer;

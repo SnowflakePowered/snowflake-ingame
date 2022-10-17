@@ -1,9 +1,9 @@
 use std::error::Error;
 
+use crate::hook::HookHandle;
 use detour::static_detour;
 use windows::Win32::Foundation::BOOL;
 use windows::Win32::Graphics::Gdi::HDC;
-use crate::hook::HookHandle;
 
 use crate::hook_define;
 use crate::hook_impl_fn;
@@ -27,7 +27,9 @@ impl WGLHookContext {
         (SWAP_BUFFERS_CHAIN, SWAP_BUFFERS_DETOUR, SwapBuffersContext)
     );
 
-    pub fn init(swap_buffers: extern "system" fn(HDC) -> BOOL) -> Result<WGLHookContext, Box<dyn Error>> {
+    pub fn init(
+        swap_buffers: extern "system" fn(HDC) -> BOOL,
+    ) -> Result<WGLHookContext, Box<dyn Error>> {
         // Setup call chain termination before detouring
         hook_link_chain! {
             box link SWAP_BUFFERS_CHAIN with SWAP_BUFFERS_DETOUR => hdc;
@@ -35,10 +37,7 @@ impl WGLHookContext {
 
         unsafe {
             SWAP_BUFFERS_DETOUR
-                .initialize(
-                    swap_buffers,
-                    WGLHookContext::swap_buffers,
-                )?
+                .initialize(swap_buffers, WGLHookContext::swap_buffers)?
                 .enable()?;
         }
 

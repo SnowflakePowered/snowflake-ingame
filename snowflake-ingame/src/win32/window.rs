@@ -1,11 +1,12 @@
 use std::mem::size_of;
-use windows::core::{PCSTR};
+use windows::core::PCSTR;
 
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleA;
-use windows::Win32::UI::WindowsAndMessaging::{CreateWindowExA, DefWindowProcA, RegisterClassExA,
-                                              UnregisterClassA, CS_HREDRAW, CS_VREDRAW, WNDCLASSEXA,
-                                              WS_OVERLAPPEDWINDOW, DestroyWindow};
+use windows::Win32::UI::WindowsAndMessaging::{
+    CreateWindowExA, DefWindowProcA, DestroyWindow, RegisterClassExA, UnregisterClassA, CS_HREDRAW,
+    CS_VREDRAW, WNDCLASSEXA, WS_OVERLAPPEDWINDOW,
+};
 
 pub struct TempWindow<'a>(WNDCLASSEXA, HWND, &'a [u8]);
 

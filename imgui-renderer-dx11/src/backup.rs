@@ -67,7 +67,7 @@ impl Default for OMBackup<'_> {
             unordered_access_views: [INIT_UAV; D3D11_1_UAV_SLOT_COUNT as usize],
             blend_state: (None, 0f32, 0),
             depth_stencil: (None, 0),
-            depth_stencil_view: None
+            depth_stencil_view: None,
         }
     }
 }
@@ -154,7 +154,10 @@ impl<'ctx> RSBackup<'ctx> {
         );
 
         backup.num_viewports = D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE;
-        context.RSGetViewports(&mut backup.num_viewports, Some(backup.viewports.as_mut_ptr()));
+        context.RSGetViewports(
+            &mut backup.num_viewports,
+            Some(backup.viewports.as_mut_ptr()),
+        );
         backup
     }
 }
@@ -164,7 +167,9 @@ impl<'ctx> Drop for RSBackup<'ctx> {
         if let Some(context) = self._parent {
             unsafe {
                 context.RSSetState(self.rs_state.as_ref());
-                context.RSSetScissorRects(Some(&self.scissor_rects[..self.num_scissor_rects as usize]));
+                context.RSSetScissorRects(Some(
+                    &self.scissor_rects[..self.num_scissor_rects as usize],
+                ));
                 context.RSSetViewports(Some(&self.viewports[..self.num_viewports as usize]));
             }
         }
@@ -180,8 +185,10 @@ impl<'ctx> OMBackup<'ctx> {
             Some(&mut backup.blend_state.1),
             Some(&mut backup.blend_state.2),
         );
-        context
-            .OMGetDepthStencilState(Some(&mut backup.depth_stencil.0), Some(&mut backup.depth_stencil.1));
+        context.OMGetDepthStencilState(
+            Some(&mut backup.depth_stencil.0),
+            Some(&mut backup.depth_stencil.1),
+        );
         context.OMGetRenderTargetsAndUnorderedAccessViews(
             Some(&mut backup.render_target_views),
             Some(&mut backup.depth_stencil_view),
@@ -250,8 +257,10 @@ macro_rules! make_shader_backup {
                     num_instances: 0,
                     class_instances: [INIT_CLS; D3D11_MAX_CLASS_INSTANCES],
                     sampler_states: [INIT_SAMPLER; D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT as usize],
-                    resource_views: [INIT_SRV; D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT as usize],
-                    const_buffers: [INIT_BUF; D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT as usize],
+                    resource_views: [INIT_SRV;
+                        D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT as usize],
+                    const_buffers: [INIT_BUF;
+                        D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT as usize],
                 }
             }
         }
@@ -276,7 +285,8 @@ macro_rules! make_shader_backup {
             fn drop(&mut self) {
                 if let Some(context) = self._parent {
                     unsafe {
-                        context.$set_shader(self.shader_state.as_ref(), Some(&self.class_instances));
+                        context
+                            .$set_shader(self.shader_state.as_ref(), Some(&self.class_instances));
                         context.$set_samplers(0, Some(&self.sampler_states));
                         context.$set_shader_resources(0, Some(&self.resource_views));
                         context.$set_const_buffers(0, Some(&self.const_buffers));
@@ -377,9 +387,10 @@ impl Default for CSBackup<'_> {
             sampler_states: [INIT_SAMPLER; D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT as usize],
             resource_views: [INIT_SRV; D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT as usize],
             const_buffers: [INIT_BUF; D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT as usize],
-            unordered_access_views: [INIT_UAV; D3D11_1_UAV_SLOT_COUNT as usize]
+            unordered_access_views: [INIT_UAV; D3D11_1_UAV_SLOT_COUNT as usize],
         }
-    }}
+    }
+}
 
 impl<'ctx> CSBackup<'ctx> {
     unsafe fn backup(context: &'ctx ID3D11DeviceContext) -> Self {

@@ -17,14 +17,14 @@ use crate::ipc::IpcConnectionBuilder;
 use crate::kernel::common::{FrameKernel, KernelContext};
 use crate::wgl::WGLKernel;
 
+mod common;
 mod d3d11;
 mod hook;
 mod ipc;
-mod wgl;
-mod win32;
-mod common;
 mod kernel;
 mod vk;
+mod wgl;
+mod win32;
 
 unsafe fn main() -> Result<(), Box<dyn Error>> {
     println!("[ingame] reached main");
@@ -55,7 +55,9 @@ pub extern "system" fn DllMain(
     _reserved: *mut c_void,
 ) -> BOOL {
     // disable DLL_THREAD_ATTACH
-    unsafe { DisableThreadLibraryCalls(module); }
+    unsafe {
+        DisableThreadLibraryCalls(module);
+    }
 
     if call_reason == DLL_PROCESS_ATTACH {
         unsafe {

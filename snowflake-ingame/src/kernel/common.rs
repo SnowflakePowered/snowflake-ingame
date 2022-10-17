@@ -1,9 +1,9 @@
+use crate::ipc::IpcHandle;
+use crate::HookHandle;
+use parking_lot::RwLock;
 use std::error::Error;
 use std::mem::ManuallyDrop;
 use std::sync::Arc;
-use parking_lot::RwLock;
-use crate::HookHandle;
-use crate::ipc::IpcHandle;
 
 #[derive(Clone)]
 pub struct KernelContext {
@@ -13,9 +13,12 @@ pub struct KernelContext {
 unsafe impl Sync for KernelContext {}
 unsafe impl Send for KernelContext {}
 
-
 /// All hooks are driven by the FrameKernel at a frame-level granularity.
-pub trait FrameKernel where Self: Sized, Self::Handle: HookHandle {
+pub trait FrameKernel
+where
+    Self: Sized,
+    Self::Handle: HookHandle,
+{
     /// The drop handle for the hook.
     type Handle;
 

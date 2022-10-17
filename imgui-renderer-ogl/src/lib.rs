@@ -1,6 +1,6 @@
-mod renderer;
-mod device_objects;
 mod backup;
+mod device_objects;
+mod renderer;
 
 use imgui::TextureId;
 use opengl_bindings::types::{GLenum, GLuint};
@@ -11,8 +11,9 @@ pub trait ImguiTexture {
 
 impl ImguiTexture for GLuint {
     fn as_tex_id(&self) -> TextureId {
-        static_assertions::const_assert!(std::mem::size_of::<GLuint>()
-            <= std::mem::size_of::<usize>());
+        static_assertions::const_assert!(
+            std::mem::size_of::<GLuint>() <= std::mem::size_of::<usize>()
+        );
         TextureId::new(*self as usize)
     }
 }
@@ -26,8 +27,8 @@ pub enum RenderError {
     LinkError,
 
     #[error("Missing required extensions: {0}")]
-    MissingExtensionError(Box<&'static str>)
+    MissingExtensionError(Box<&'static str>),
 }
 
-pub use renderer::Renderer as OpenGLImguiRenderer;
 pub use renderer::RenderToken;
+pub use renderer::Renderer as OpenGLImguiRenderer;

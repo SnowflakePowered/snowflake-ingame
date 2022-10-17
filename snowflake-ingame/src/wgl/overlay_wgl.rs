@@ -4,12 +4,12 @@ use windows::Win32::Graphics::OpenGL::HGLRC;
 
 use imgui_renderer_ogl::ImguiTexture;
 use opengl_bindings as gl;
-use opengl_bindings::Gl;
 use opengl_bindings::types::{GLint, GLsizei, GLuint};
+use opengl_bindings::Gl;
 
 use crate::common::{Dimensions, RenderError};
 use crate::ipc::cmd::OverlayTextureEventParams;
-use crate::win32::handle::{HandleError, try_close_handle, try_duplicate_handle};
+use crate::win32::handle::{try_close_handle, try_duplicate_handle, HandleError};
 
 pub(in crate::wgl) struct WGLOverlay {
     handle: HANDLE,
@@ -17,13 +17,13 @@ pub(in crate::wgl) struct WGLOverlay {
     context: HGLRC,
     dimensions: Dimensions,
     size: u64,
-    texture: Option<GlSharedTexture>
+    texture: Option<GlSharedTexture>,
 }
 
 struct GlSharedTexture {
     gl: Gl,
     texture: GLuint,
-    memory: GLuint
+    memory: GLuint,
 }
 
 pub(in crate::wgl) struct KeyedMutexHandle<'gl>(&'gl Gl, GLuint, u64);
@@ -37,7 +37,7 @@ impl Drop for KeyedMutexHandle<'_> {
     }
 }
 
-impl <'gl> KeyedMutexHandle<'gl> {
+impl<'gl> KeyedMutexHandle<'gl> {
     pub fn new(gl: &'gl Gl, mem: GLuint, key: u64, ms: u32) -> Option<Self> {
         unsafe {
             if gl.AcquireKeyedMutexWin32EXT(mem, key, ms) == gl::TRUE {
@@ -87,7 +87,7 @@ impl WGLOverlay {
             None
         }
     }
-    
+
     pub fn new() -> WGLOverlay {
         WGLOverlay {
             handle: HANDLE::default(),
@@ -95,7 +95,7 @@ impl WGLOverlay {
             context: HGLRC::default(),
             dimensions: Dimensions::new(0, 0),
             size: 0,
-            texture: None
+            texture: None,
         }
     }
 
@@ -120,7 +120,7 @@ impl WGLOverlay {
 
         self.dimensions = Dimensions {
             height: params.height,
-            width: params.width
+            width: params.width,
         };
 
         self.size = params.size;
@@ -128,7 +128,12 @@ impl WGLOverlay {
     }
 
     #[must_use]
-    pub fn prepare_paint(&mut self, gl: &Gl, window: HWND, context: HGLRC) -> Result<(), RenderError> {
+    pub fn prepare_paint(
+        &mut self,
+        gl: &Gl,
+        window: HWND,
+        context: HGLRC,
+    ) -> Result<(), RenderError> {
         if self.ready_to_paint() && self.window == window && self.context == context {
             return Ok(());
         }
@@ -143,44 +148,67 @@ impl WGLOverlay {
             || !gl.ReleaseKeyedMutexWin32EXT.is_loaded()
             || !gl.TextureParameteri.is_loaded()
         {
-            return Err(imgui_renderer_ogl::RenderError::MissingExtensionError(Box::new("GL_EXT_memory_object_win32, GL_EXT_direct_state_access")).into())
+            return Err(
+                imgui_renderer_ogl::RenderError::MissingExtensionError(Box::new(
+                    "GL_EXT_memory_object_win32, GL_EXT_direct_state_access",
+                ))
+                .into(),
+            );
         }
 
         unsafe {
             let mut texture = 0;
             gl.CreateTextures(gl::TEXTURE_2D, 1, &mut texture);
-            gl.TextureParameteri(texture, gl::TEXTURE_TILING_EXT, gl::OPTIMAL_TILING_EXT as GLint);
+            gl.TextureParameteri(
+                texture,
+                gl::TEXTURE_TILING_EXT,
+                gl::OPTIMAL_TILING_EXT as GLint,
+            );
             gl.TextureParameteri(texture, gl::TEXTURE_MIN_FILTER, gl::LINEAR as GLint);
             gl.TextureParameteri(texture, gl::TEXTURE_MAG_FILTER, gl::LINEAR as GLint);
             gl.TextureParameteri(texture, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as GLint);
             gl.TextureParameteri(texture, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as GLint);
 
-            gl.TextureParameteriv(texture, gl::TEXTURE_SWIZZLE_RGBA,
-                                  [gl::BLUE, gl::GREEN, gl::RED, gl::ALPHA].as_ptr() as _);
+            gl.TextureParameteriv(
+                texture,
+                gl::TEXTURE_SWIZZLE_RGBA,
+                [gl::BLUE, gl::GREEN, gl::RED, gl::ALPHA].as_ptr() as _,
+            );
 
             let mut memory = 0;
             gl.CreateMemoryObjectsEXT(1, &mut memory);
 
             // strict_provenance: handle is an int, this is fine.
             // https://github.com/microsoft/windows-rs/issues/1643
-            gl.ImportMemoryWin32HandleEXT(memory, self.size, gl::HANDLE_TYPE_D3D11_IMAGE_EXT,
-                                          self.handle.0 as *mut core::ffi::c_void);
+            gl.ImportMemoryWin32HandleEXT(
+                memory,
+                self.size,
+                gl::HANDLE_TYPE_D3D11_IMAGE_EXT,
+                self.handle.0 as *mut core::ffi::c_void,
+            );
 
             if gl.AcquireKeyedMutexWin32EXT(memory, 0, GLuint::MAX) == gl::TRUE {
                 // todo: check gl error
-                gl.TextureStorageMem2DEXT(texture, 1, gl::RGBA8, self.dimensions.width as GLsizei,
-                                          self.dimensions.height as GLsizei, memory, 0);
+                gl.TextureStorageMem2DEXT(
+                    texture,
+                    1,
+                    gl::RGBA8,
+                    self.dimensions.width as GLsizei,
+                    self.dimensions.height as GLsizei,
+                    memory,
+                    0,
+                );
                 gl.ReleaseKeyedMutexWin32EXT(memory, 0);
             } else {
                 gl.DeleteTextures(1, &texture);
                 gl.DeleteMemoryObjectsEXT(1, &memory);
-                return Err(RenderError::OverlayMutexNotReady)
+                return Err(RenderError::OverlayMutexNotReady);
             }
 
             self.texture = Some(GlSharedTexture {
                 gl: gl.clone(),
                 texture,
-                memory
+                memory,
             })
         }
         Ok(())

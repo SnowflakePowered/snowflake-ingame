@@ -7,9 +7,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let target_process = OwnedProcess::from_child(child);
     let syringe = Syringe::for_process(target_process);
 
-    syringe.inject(
-        "D:\\coding\\snowflake-ingame\\target\\debug\\snowflake_ingame.dll",
-    )?;
+    syringe.inject("D:\\coding\\snowflake-ingame\\target\\debug\\snowflake_ingame.dll")?;
     Ok(())
 }
 

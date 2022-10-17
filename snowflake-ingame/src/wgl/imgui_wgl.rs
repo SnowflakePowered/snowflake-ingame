@@ -1,14 +1,14 @@
-use std::sync::Arc;
-use imgui::{Context, DrawData};
-use parking_lot::RwLock;
-use windows::Win32::Foundation::HWND;
-use windows::Win32::Graphics::OpenGL::HGLRC;
-use imgui_renderer_ogl::{OpenGLImguiRenderer,  RenderToken};
-use opengl_bindings::Gl;
 use crate::common::{Dimensions, RenderError};
 use crate::wgl::overlay::WGLOverlay;
+use imgui::{Context, DrawData};
+use imgui_renderer_ogl::{OpenGLImguiRenderer, RenderToken};
+use opengl_bindings::Gl;
+use parking_lot::RwLock;
+use std::sync::Arc;
+use windows::Win32::Foundation::HWND;
+use windows::Win32::Graphics::OpenGL::HGLRC;
 
-pub (in crate::wgl) struct WGLImguiController {
+pub(in crate::wgl) struct WGLImguiController {
     imgui: Arc<RwLock<Context>>,
     renderer: Option<OpenGLImguiRenderer>,
     window: HWND,
@@ -54,7 +54,10 @@ impl WGLImguiController {
         self.renderer = None;
     }
 
-    pub fn frame<'a, F: FnOnce(&mut Context, Render, &mut WGLOverlay) -> Result<RenderToken, RenderError>>(
+    pub fn frame<
+        'a,
+        F: FnOnce(&mut Context, Render, &mut WGLOverlay) -> Result<RenderToken, RenderError>,
+    >(
         &mut self,
         overlay: &mut WGLOverlay,
         f: F,
@@ -67,7 +70,13 @@ impl WGLImguiController {
     }
 
     #[must_use]
-    pub fn prepare_paint(&mut self, gl: &Gl, window: HWND, ctx: HGLRC, screen_dim: Dimensions) -> Result<(), RenderError> {
+    pub fn prepare_paint(
+        &mut self,
+        gl: &Gl,
+        window: HWND,
+        ctx: HGLRC,
+        screen_dim: Dimensions,
+    ) -> Result<(), RenderError> {
         if window != self.window || ctx != self.ctx {
             eprintln!("[wgl] render context changed");
             self.invalidate_renderer();

@@ -1,18 +1,23 @@
 use std::error::Error;
 
+use crate::hook::HookHandle;
 use detour::static_detour;
-use windows::core::{HSTRING, Vtable};
+use windows::core::{Vtable, HSTRING};
 use windows::Win32::Foundation::{BOOL, HINSTANCE};
 use windows::Win32::Graphics::Direct3D::{
     D3D_DRIVER_TYPE_HARDWARE, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_11_1,
 };
-use windows::Win32::Graphics::Direct3D11::{D3D11_CREATE_DEVICE_FLAG, D3D11_SDK_VERSION, D3D11CreateDevice, ID3D11Device_Vtbl};
-use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory, DXGI_ERROR_INVALID_CALL, DXGI_SWAP_CHAIN_DESC, DXGI_SWAP_EFFECT_DISCARD, DXGI_USAGE_RENDER_TARGET_OUTPUT, IDXGIFactory, IDXGISwapChain, IDXGISwapChain_Vtbl};
+use windows::Win32::Graphics::Direct3D11::{
+    D3D11CreateDevice, ID3D11Device_Vtbl, D3D11_CREATE_DEVICE_FLAG, D3D11_SDK_VERSION,
+};
 use windows::Win32::Graphics::Dxgi::Common::{
     DXGI_FORMAT, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_MODE_DESC, DXGI_MODE_SCALING_UNSPECIFIED,
     DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED, DXGI_RATIONAL, DXGI_SAMPLE_DESC,
 };
-use crate::hook::HookHandle;
+use windows::Win32::Graphics::Dxgi::{
+    CreateDXGIFactory, IDXGIFactory, IDXGISwapChain, IDXGISwapChain_Vtbl, DXGI_ERROR_INVALID_CALL,
+    DXGI_SWAP_CHAIN_DESC, DXGI_SWAP_EFFECT_DISCARD, DXGI_USAGE_RENDER_TARGET_OUTPUT,
+};
 
 use crate::hook_define;
 use crate::hook_impl_fn;
@@ -57,11 +62,12 @@ fn get_vtables() -> Result<VTables, Box<dyn Error>> {
     let mut _out_context = None;
     let mut _out_feature_level = D3D_FEATURE_LEVEL_11_0;
 
-    let fac : IDXGIFactory = unsafe { CreateDXGIFactory()? };
+    let fac: IDXGIFactory = unsafe { CreateDXGIFactory()? };
     eprintln!("[dx11] factory created");
 
     let _dev = unsafe {
-        D3D11CreateDevice(None,
+        D3D11CreateDevice(
+            None,
             D3D_DRIVER_TYPE_HARDWARE,
             HINSTANCE::default(),
             D3D11_CREATE_DEVICE_FLAG(0),
@@ -69,15 +75,19 @@ fn get_vtables() -> Result<VTables, Box<dyn Error>> {
             D3D11_SDK_VERSION,
             Some(&mut out_device),
             Some(&mut _out_feature_level),
-            Some(&mut _out_context)
+            Some(&mut _out_context),
         )?
     };
-    let device = out_device.ok_or( windows::core::Error::new(DXGI_ERROR_INVALID_CALL, HSTRING::default()))?;
+    let device = out_device.ok_or(windows::core::Error::new(
+        DXGI_ERROR_INVALID_CALL,
+        HSTRING::default(),
+    ))?;
     eprintln!("[dx11] device created");
 
-    let swap_chain : IDXGISwapChain = unsafe {
+    let swap_chain: IDXGISwapChain = unsafe {
         let mut swap_chain = None;
-        fac.CreateSwapChain(&device, &swapchain_desc, &mut swap_chain).ok()?;
+        fac.CreateSwapChain(&device, &swapchain_desc, &mut swap_chain)
+            .ok()?;
         swap_chain.expect("[dx11] swapchain creation failed.")
     };
 
@@ -93,9 +103,19 @@ fn get_vtables() -> Result<VTables, Box<dyn Error>> {
 pub type FnPresentHook =
     Box<dyn Send + Sync + Fn(IDXGISwapChain, u32, u32, PresentContext) -> windows::core::HRESULT>;
 
-pub type FnResizeBuffersHook = Box<dyn Send + Sync + Fn(
-    IDXGISwapChain, u32, u32, u32, DXGI_FORMAT, u32, ResizeBuffersContext,
-) -> windows::core::HRESULT>;
+pub type FnResizeBuffersHook = Box<
+    dyn Send
+        + Sync
+        + Fn(
+            IDXGISwapChain,
+            u32,
+            u32,
+            u32,
+            DXGI_FORMAT,
+            u32,
+            ResizeBuffersContext,
+        ) -> windows::core::HRESULT,
+>;
 
 static_detour! {
     static PRESENT_DETOUR: extern "system" fn(IDXGISwapChain, u32, u32) -> windows::core::HRESULT;

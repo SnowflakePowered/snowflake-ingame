@@ -1,18 +1,18 @@
 use imgui::TextureId;
 use windows::core::Interface;
 use windows::Win32::Foundation::{HANDLE, HWND};
-use windows::Win32::Graphics::Direct3D11::{
-    D3D11_SHADER_RESOURCE_VIEW_DESC, D3D11_SHADER_RESOURCE_VIEW_DESC_0, D3D11_TEX2D_SRV, ID3D11Device1,
-    ID3D11ShaderResourceView, ID3D11Texture2D,
-};
 use windows::Win32::Graphics::Direct3D::D3D11_SRV_DIMENSION_TEXTURE2D;
+use windows::Win32::Graphics::Direct3D11::{
+    ID3D11Device1, ID3D11ShaderResourceView, ID3D11Texture2D, D3D11_SHADER_RESOURCE_VIEW_DESC,
+    D3D11_SHADER_RESOURCE_VIEW_DESC_0, D3D11_TEX2D_SRV,
+};
 use windows::Win32::Graphics::Dxgi::IDXGIKeyedMutex;
 
 use imgui_renderer_dx11::ImguiTexture;
 
 use crate::common::{Dimensions, RenderError};
 use crate::ipc::cmd::OverlayTextureEventParams;
-use crate::win32::handle::{HandleError, try_close_handle, try_duplicate_handle};
+use crate::win32::handle::{try_close_handle, try_duplicate_handle, HandleError};
 
 pub(in crate::d3d11) struct Direct3D11Overlay {
     keyed_mutex: Option<IDXGIKeyedMutex>,
@@ -90,19 +90,19 @@ impl Direct3D11Overlay {
     }
 
     #[must_use]
-    pub fn prepare_paint(&mut self, device: ID3D11Device1, output_window: HWND) -> Result<(), RenderError> {
+    pub fn prepare_paint(
+        &mut self,
+        device: ID3D11Device1,
+        output_window: HWND,
+    ) -> Result<(), RenderError> {
         if self.ready_to_paint() && self.window == output_window {
             return Ok(());
         }
 
         self.invalidate();
 
-
         let tex_2d: ID3D11Texture2D = unsafe { device.OpenSharedResource1(self.handle) }
-            .map_err(|e| {
-                RenderError::OverlayHandleError(self.handle, e)
-            })?;
-
+            .map_err(|e| RenderError::OverlayHandleError(self.handle, e))?;
 
         let tex_mtx: IDXGIKeyedMutex = Interface::cast(&tex_2d)?;
 

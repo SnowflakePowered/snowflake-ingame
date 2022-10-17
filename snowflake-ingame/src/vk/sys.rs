@@ -10,6 +10,7 @@ use std::cell::{LazyCell, OnceCell};
 use std::collections::HashMap;
 use std::ffi::{c_char, c_void, CStr};
 use std::sync::{OnceLock, RwLock};
+use dashmap::DashMap;
 use windows::Win32::System::Console::AllocConsole;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -78,15 +79,15 @@ pub struct DeviceDispatchTable {
 }
 
 #[allow(clippy::type_complexity)]
-static mut DEVICE: LazyCell<RwLock<HashMap<vk::Device, DeviceDispatchTable>>> =
+static mut DEVICE: LazyCell<DashMap<vk::Device, DeviceDispatchTable>> =
     LazyCell::new(Default::default);
 
 #[allow(clippy::type_complexity)]
-static mut PHYSICAL_DEVICE_MAP: LazyCell<RwLock<HashMap<vk::PhysicalDevice, vk::Instance>>> =
+static mut PHYSICAL_DEVICE_MAP: LazyCell<DashMap<vk::PhysicalDevice, vk::Instance>> =
     LazyCell::new(Default::default);
 
 #[allow(clippy::type_complexity)]
-static mut INSTANCE: LazyCell<RwLock<HashMap<vk::Instance, InstanceDispatchTable>>> =
+static mut INSTANCE: LazyCell<DashMap<vk::Instance, InstanceDispatchTable>> =
     LazyCell::new(Default::default);
 
 #[no_mangle]
@@ -107,8 +108,6 @@ unsafe extern "system" fn get_device_proc_addr(
             create_swapchain as vk::PFN_vkCreateSwapchainKHR,
         )),
         _ => DEVICE
-            .read()
-            .ok()?
             .get(&device)
             .map(|dispatch| (dispatch.get_device_proc_addr)(device, p_name))
             .unwrap_or(None),
@@ -139,8 +138,6 @@ unsafe extern "system" fn get_instance_proc_addr(
             destroy_device as vk::PFN_vkDestroyDevice,
         )),
         _ => INSTANCE
-            .read()
-            .ok()?
             .get(&instance)
             .map(|dispatch| (dispatch.get_instance_proc_addr)(instance, p_name))
             .unwrap_or(None),
@@ -158,8 +155,6 @@ unsafe extern "system" fn get_base_device_proc_addr(
             get_base_device_proc_addr as vk::PFN_vkGetDeviceProcAddr,
         )),
         _ => DEVICE
-            .read()
-            .ok()?
             .get(&device)
             .map(|dispatch| (dispatch.get_device_proc_addr)(device, p_name))
             .unwrap_or(None),
@@ -180,8 +175,6 @@ unsafe extern "system" fn get_base_instance_proc_addr(
             get_base_device_proc_addr as vk::PFN_vkGetDeviceProcAddr,
         )),
         _ => INSTANCE
-            .read()
-            .ok()?
             .get(&instance)
             .map(|dispatch| (dispatch.get_instance_proc_addr)(instance, p_name))
             .unwrap_or(None),
@@ -189,24 +182,19 @@ unsafe extern "system" fn get_base_instance_proc_addr(
 }
 
 pub unsafe fn get_device_vtable(device_handle: &vk::Device) -> Option<Device> {
-    if let Ok(dispatch) = DEVICE.read() {
-        if let Some(device) = dispatch.get(device_handle) {
-            let instance = &device.instance_vtable;
-            let device = Device::load(instance.fp_v1_0(), *device_handle);
-            return Some(device);
-        }
+    if let Some(device) = DEVICE.get(device_handle) {
+        let instance = &device.instance_vtable;
+        let device = Device::load(instance.fp_v1_0(), *device_handle);
+        return Some(device);
     }
     None
 }
 
 pub unsafe fn get_swapchain_vtable(device_handle: &vk::Device) -> Option<Swapchain> {
-    if let Ok(dispatch) = DEVICE.read() {
-        if let Some(device) = dispatch.get(device_handle) {
-            let instance = &device.instance_vtable;
-
-            let device = Device::load(instance.fp_v1_0(), *device_handle);
-            return Some(Swapchain::new(&instance, &device));
-        }
+    if let Some(device) = DEVICE.get(device_handle) {
+        let instance = &device.instance_vtable;
+        let device = Device::load(instance.fp_v1_0(), *device_handle);
+        return Some(Swapchain::new(&instance, &device));
     }
     None
 }
@@ -274,11 +262,9 @@ unsafe extern "system" fn create_device(
     ));
     let result = fp_create_device(physical_device, p_create_info, p_allocator, p_device);
 
-    let instance_handle = PHYSICAL_DEVICE_MAP
-        .read()
-        .ok()
-        .and_then(|p| p.get(&physical_device).cloned())
-        .expect("[vk] no instance found for physical device");
+    let instance_handle = PHYSICAL_DEVICE_MAP.get(&physical_device)
+        .expect("[vk] no instance found for physical device")
+        .clone();
 
     // the unhooked instance vtable isn't actually used,
     // except for get_device_proc_addr.
@@ -302,7 +288,7 @@ unsafe extern "system" fn create_device(
     };
 
     let result = (move || {
-        DEVICE.write().ok()?.insert(*p_device, dispatch);
+        DEVICE.insert(*p_device, dispatch);
         kernel::acquire().ok()?;
         Some(result)
     })()
@@ -323,8 +309,8 @@ unsafe extern "system" fn destroy_device(
     // todo: delete kernel...
     (|| {
         kernel::kill();
-        let dispatch = DEVICE.write().ok()?.remove(&device);
-        if let Some(dispatch) = dispatch {
+        let dispatch = DEVICE.remove(&device);
+        if let Some((_, dispatch)) = dispatch {
             dispatch.device_vtable.destroy_device(p_allocator.as_ref())
         }
         Some(())
@@ -384,11 +370,8 @@ unsafe extern "system" fn create_instance(
     );
 
     if let Ok(phys_devices) = instance_vtable.enumerate_physical_devices() {
-        let mut map = PHYSICAL_DEVICE_MAP
-            .write()
-            .expect("[vk] could not acquire PhysicalDeviceMap");
         for device in phys_devices {
-            map.insert(device, *p_instance);
+            PHYSICAL_DEVICE_MAP.insert(device, *p_instance);
         }
     }
 
@@ -398,7 +381,7 @@ unsafe extern "system" fn create_instance(
     };
 
     let result = (move || {
-        INSTANCE.write().ok()?.insert(*p_instance, dispatch);
+        INSTANCE.insert(*p_instance, dispatch);
         Some(result)
     })()
     .unwrap_or(VkResult::ERROR_INITIALIZATION_FAILED);
@@ -411,8 +394,8 @@ unsafe extern "system" fn destroy_instance(
     p_allocator: *const vk::AllocationCallbacks,
 ) {
     (|| {
-        let dispatch = INSTANCE.write().ok()?.remove(&instance);
-        if let Some(dispatch) = dispatch {
+        let dispatch = INSTANCE.remove(&instance);
+        if let Some((_, dispatch)) = dispatch {
             dispatch
                 .instance_vtable
                 .destroy_instance(p_allocator.as_ref())

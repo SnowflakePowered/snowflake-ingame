@@ -1,11 +1,11 @@
 use crate::vk::hook_vk::VkHookContext;
-use crate::{kernel, HookChain};
+use crate::{HookChain, kernel};
 use ash::extensions::khr::Swapchain;
 use ash::vk::{
     AllocationCallbacks, InstanceFnV1_0, Result as VkResult, StaticFn, SwapchainCreateInfoKHR,
     SwapchainKHR,
 };
-use ash::{vk, Device, Instance};
+use ash::{Device, Instance, vk};
 use std::cell::{LazyCell, OnceCell};
 use std::collections::HashMap;
 use std::ffi::{c_char, c_void, CStr};
@@ -16,7 +16,7 @@ use windows::Win32::System::Console::AllocConsole;
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 #[repr(transparent)]
 #[must_use]
-pub struct VkLayerNegotiateStructType(pub(crate) i32);
+struct VkLayerNegotiateStructType(pub(crate) i32);
 impl VkLayerNegotiateStructType {
     pub const LAYER_NEGOTIATE_INTERFACE_STRUCT: Self = Self(1);
 }
@@ -24,7 +24,7 @@ impl VkLayerNegotiateStructType {
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 #[repr(transparent)]
 #[must_use]
-pub struct VkLayerFunction(pub(crate) i32);
+struct VkLayerFunction(pub(crate) i32);
 impl VkLayerFunction {
     pub const VK_LAYER_FUNCTION_LINK: Self = Self(0);
     #[allow(dead_code)]
@@ -32,35 +32,47 @@ impl VkLayerFunction {
 }
 
 #[repr(C)]
-pub struct VkLayerInstanceCreateInfo {
-    pub s_type: vk::StructureType,
-    pub p_next: *const c_void,
-    pub function: VkLayerFunction,
+struct VkLayerInstanceCreateInfo {
+    s_type: vk::StructureType,
+    p_next: *const c_void,
+    function: VkLayerFunction,
     /* This should properly be represented as union with PFN_vkSetInstanceLoaderData,
       In practice, it doesn't matter.
     */
-    pub p_layer_info: *const VkLayerInstanceLink,
+    p_layer_info: *const VkLayerInstanceLink,
 }
 #[repr(C)]
-pub struct VkLayerInstanceLink {
-    pub p_next: *const VkLayerInstanceLink,
-    pub pfn_next_get_instance_proc_addr: vk::PFN_vkGetInstanceProcAddr,
-    pub pfn_next_get_device_proc_addr: vk::PFN_vkGetDeviceProcAddr,
-}
-
-#[repr(C)]
-pub struct VkLayerDeviceCreateInfo {
-    pub s_type: vk::StructureType,
-    pub p_next: *const c_void,
-    pub function: VkLayerFunction,
-    pub p_layer_info: *const VkLayerDeviceLink,
+struct VkLayerInstanceLink {
+    p_next: *const VkLayerInstanceLink,
+    pfn_next_get_instance_proc_addr: vk::PFN_vkGetInstanceProcAddr,
+    pfn_next_get_device_proc_addr: vk::PFN_vkGetDeviceProcAddr,
 }
 
 #[repr(C)]
-pub struct VkLayerDeviceLink {
-    pub p_next: *const VkLayerDeviceLink,
-    pub pfn_next_get_instance_proc_addr: vk::PFN_vkGetInstanceProcAddr,
-    pub pfn_next_get_device_proc_addr: vk::PFN_vkGetDeviceProcAddr,
+struct VkLayerDeviceCreateInfo {
+    s_type: vk::StructureType,
+    p_next: *const c_void,
+    function: VkLayerFunction,
+    p_layer_info: *const VkLayerDeviceLink,
+}
+
+#[repr(C)]
+struct VkLayerDeviceLink {
+    p_next: *const VkLayerDeviceLink,
+    pfn_next_get_instance_proc_addr: vk::PFN_vkGetInstanceProcAddr,
+    pfn_next_get_device_proc_addr: vk::PFN_vkGetDeviceProcAddr,
+}
+
+#[repr(C)]
+struct VkNegotiateLayerInterface {
+    s_type: VkLayerNegotiateStructType,
+    p_next: *const c_void,
+    loader_layer_interface_version: u32,
+    pfn_get_instance_proc_addr: vk::PFN_vkGetInstanceProcAddr,
+    pfn_get_device_proc_addr: vk::PFN_vkGetDeviceProcAddr,
+
+    // typedef PFN_vkVoidFunction (VKAPI_PTR *PFN_GetPhysicalDeviceProcAddr)(VkInstance instance, const char* pName);
+    pfn_get_physical_device_proc_addr: Option<ash::vk::PFN_vkGetInstanceProcAddr>,
 }
 
 #[derive(Clone)]
@@ -105,12 +117,9 @@ unsafe extern "system" fn get_device_proc_addr(
             destroy_device as vk::PFN_vkDestroyDevice,
         )),
         b"vkCreateSwapchainKHR" => Some(std::mem::transmute(
-            create_swapchain as vk::PFN_vkCreateSwapchainKHR,
+            hooks::create_swapchain as vk::PFN_vkCreateSwapchainKHR,
         )),
-        _ => DEVICE
-            .get(&device)
-            .map(|dispatch| (dispatch.get_device_proc_addr)(device, p_name))
-            .unwrap_or(None),
+        _ => get_base_device_proc_addr(device, p_name),
     }
 }
 
@@ -137,10 +146,7 @@ unsafe extern "system" fn get_instance_proc_addr(
         b"vkDestroyDevice" => Some(std::mem::transmute(
             destroy_device as vk::PFN_vkDestroyDevice,
         )),
-        _ => INSTANCE
-            .get(&instance)
-            .map(|dispatch| (dispatch.get_instance_proc_addr)(instance, p_name))
-            .unwrap_or(None),
+        _ => get_base_instance_proc_addr(instance, p_name),
     }
 }
 
@@ -181,39 +187,20 @@ unsafe extern "system" fn get_base_instance_proc_addr(
     }
 }
 
+pub unsafe fn get_instance_vtable(device_handle: &vk::Device) -> Option<Instance> {
+    if let Some(device) = DEVICE.get(device_handle) {
+        let instance = &device.instance_vtable;
+        return Some(instance.clone());
+    }
+    None
+}
+
 pub unsafe fn get_device_vtable(device_handle: &vk::Device) -> Option<Device> {
     if let Some(device) = DEVICE.get(device_handle) {
-        let instance = &device.instance_vtable;
-        let device = Device::load(instance.fp_v1_0(), *device_handle);
-        return Some(device);
+        let device = &device.device_vtable;
+        return Some(device.clone());
     }
     None
-}
-
-pub unsafe fn get_swapchain_vtable(device_handle: &vk::Device) -> Option<Swapchain> {
-    if let Some(device) = DEVICE.get(device_handle) {
-        let instance = &device.instance_vtable;
-        let device = Device::load(instance.fp_v1_0(), *device_handle);
-        return Some(Swapchain::new(&instance, &device));
-    }
-    None
-}
-
-unsafe extern "system" fn create_swapchain(
-    device: vk::Device,
-    create_info: *const SwapchainCreateInfoKHR,
-    allocator: *const AllocationCallbacks,
-    swapchain: *mut SwapchainKHR,
-) -> vk::Result {
-    let swapchain_fp =
-        get_swapchain_vtable(&device).expect("[vk] could not get swapchain extensions.");
-    VkHookContext::create_swapchain_khr(
-        swapchain_fp.fp().create_swapchain_khr,
-        device,
-        &*create_info,
-        allocator.as_ref(),
-        &mut *swapchain,
-    )
 }
 
 // https://android.googlesource.com/platform/cts/+/6743db1/hostsidetests/gputools/layers/jni/nullLayer.cpp
@@ -405,22 +392,11 @@ unsafe extern "system" fn destroy_instance(
     .unwrap_or(())
 }
 
-#[repr(C)]
-pub struct VkNegotiateLayerInterface {
-    pub s_type: VkLayerNegotiateStructType,
-    pub p_next: *const c_void,
-    pub loader_layer_interface_version: u32,
-    pub pfn_get_instance_proc_addr: vk::PFN_vkGetInstanceProcAddr,
-    pub pfn_get_device_proc_addr: vk::PFN_vkGetDeviceProcAddr,
-
-    // typedef PFN_vkVoidFunction (VKAPI_PTR *PFN_GetPhysicalDeviceProcAddr)(VkInstance instance, const char* pName);
-    pub pfn_get_physical_device_proc_addr: Option<ash::vk::PFN_vkGetInstanceProcAddr>,
-}
-
 use crate::hook::HookHandle;
+use crate::vk::sys::hooks;
 
 #[no_mangle]
-pub unsafe extern "system" fn vk_main(interface: *mut VkNegotiateLayerInterface) -> VkResult {
+unsafe extern "system" fn vk_main(interface: *mut VkNegotiateLayerInterface) -> VkResult {
     eprintln!("[vk] layer version negotiate");
     if (*interface).s_type != VkLayerNegotiateStructType::LAYER_NEGOTIATE_INTERFACE_STRUCT {
         return VkResult::ERROR_INITIALIZATION_FAILED;
@@ -443,10 +419,10 @@ pub unsafe extern "system" fn vk_main(interface: *mut VkNegotiateLayerInterface)
     (*interface).pfn_get_physical_device_proc_addr = None;
     VkHookContext::init()
         .expect("todo panic init")
-        .new(Box::new(move |device, create_info, all, s, mut next| {
+        .new(Box::new(move |device, create_info, all, mut next| {
             eprintln!("{:?}", *create_info);
             let fp = next.fp_next();
-            fp(device, create_info, all, s, next)
+            fp(device, create_info, all, next)
         }))
         .expect("TODO: panic message")
         .persist();

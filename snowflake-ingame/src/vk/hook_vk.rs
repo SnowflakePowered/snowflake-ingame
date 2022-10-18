@@ -1,9 +1,11 @@
 use crate::{hook_define, hook_make_chain, HookHandle};
 use ash::prelude::VkResult;
-use ash::vk::{PFN_vkCreateSwapchainKHR, StaticFn};
+use ash::vk::{PFN_vkCreateSwapchainKHR, StaticFn, SwapchainKHR};
 use ash::{vk, RawPtr};
 use std::error::Error;
+use ash::extensions::khr::Swapchain;
 use tokio::io::AsyncReadExt;
+use crate::vk::sys::HookedVulkanDeviceHandle;
 
 // https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/vkCreateSwapchainKHR.html
 pub type FnCreateSwapchainKHRHook = Box<
@@ -11,9 +13,8 @@ pub type FnCreateSwapchainKHRHook = Box<
             vk::Device,
             &vk::SwapchainCreateInfoKHR,
             Option<&vk::AllocationCallbacks>,
-            &mut vk::SwapchainKHR,
             CreateSwapchainKHRContext,
-        ) -> vk::Result)
+        ) -> VkResult<SwapchainKHR>)
         + Send
         + Sync,
 >;
@@ -28,12 +29,10 @@ pub(in crate::vk) struct VkHookContext;
 
 impl VkHookContext {
     pub(in crate::vk) fn create_swapchain_khr(
-        base: vk::PFN_vkCreateSwapchainKHR,
         device: vk::Device,
         create_info: &vk::SwapchainCreateInfoKHR,
         alloc: Option<&vk::AllocationCallbacks>,
-        swapchain: &mut vk::SwapchainKHR,
-    ) -> vk::Result {
+    ) -> VkResult<SwapchainKHR> {
         if let Ok(chain) = CREATE_SWAPCHAIN_KHR_CHAIN.read() {
             if let Some((_, next)) = chain.last() {
                 let mut iter = chain.iter().rev();
@@ -42,30 +41,32 @@ impl VkHookContext {
                     device,
                     create_info,
                     alloc,
-                    swapchain,
                     CreateSwapchainKHRContext { chain: iter },
                 );
             }
         }
-        unsafe { base(device, create_info, alloc.as_raw_ptr(), swapchain) }
+
+        unsafe {
+            let device_vtable = device.get_device_vtable()
+                .expect("[vk] device not loaded");
+            let instance_vtable = device.get_instance_vtable()
+                .expect("[vk] instance not loaded");
+
+            Swapchain::new(&instance_vtable, &device_vtable)
+                .create_swapchain(create_info, alloc)
+        }
     }
 
     pub fn init() -> Result<Self, Box<dyn Error>> {
         CREATE_SWAPCHAIN_KHR_CHAIN.write()?.insert(
             0,
-            Box::new(move |device, createinfo, alloc, out, _next| unsafe {
-                let dpa =
-                    crate::vk::sys::get_swapchain_vtable(&device).expect("[vk] device not loaded");
+            Box::new(move |device, create_info, alloc, _next| unsafe {
+                let device_vtable = device.get_device_vtable()
+                    .expect("[vk] device not loaded");
+                let instance_vtable = device.get_instance_vtable()
+                    .expect("[vk] instance not loaded");
 
-                let swapchain = dpa.create_swapchain(createinfo, alloc);
-
-                match swapchain {
-                    Ok(swapchain) => {
-                        *out = swapchain;
-                        vk::Result::SUCCESS
-                    }
-                    Err(result) => result,
-                }
+                Swapchain::new(&instance_vtable, &device_vtable).create_swapchain(create_info, alloc)
             }),
         );
         Ok(VkHookContext)
